@@ -561,6 +561,8 @@ function captcha_active(): bool
  * Ambiguous glyphs (0/O, 1/I/L) are left out: a CAPTCHA that fails honest
  * people because they cannot tell O from 0 is just an obstacle.
  */
+const CAPTCHA_TTL_SECONDS = 600;
+
 function captcha_local_issue(int $length = 5): string
 {
     $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -572,6 +574,53 @@ function captcha_local_issue(int $length = 5): string
     $_SESSION['captcha'] = ['code' => $code, 'issued' => time()];
 
     return $code;
+}
+
+/**
+ * The code of the challenge currently in the session, without issuing a new
+ * one. Used by the audio endpoint so the sound and the picture always describe
+ * the same challenge; returns null when there is nothing live to read.
+ */
+function captcha_current_code(): ?string
+{
+    $challenge = $_SESSION['captcha'] ?? null;
+    if (!$challenge || !isset($challenge['code'], $challenge['issued'])) {
+        return null;
+    }
+    if (time() - (int)$challenge['issued'] > CAPTCHA_TTL_SECONDS) {
+        return null;
+    }
+
+    return (string)$challenge['code'];
+}
+
+/**
+ * Rate limit for the CAPTCHA endpoints, per session and per bucket.
+ *
+ * Issuing an image or a clip costs real work, and verifying costs a guess.
+ * Without a ceiling, the refresh button is a free way to spin the CPU and the
+ * answer field is a free way to brute force a five-character code. Counted in
+ * the session rather than a table: it is throttling one browser, not banning
+ * an address, and it must keep working when the database is busy.
+ */
+function captcha_rate_ok(string $bucket, int $limit = 12, int $window = 60): bool
+{
+    $now = time();
+    $key = 'captcha_rate_' . $bucket;
+    $hits = $_SESSION[$key] ?? [];
+
+    // Drop anything that has aged out of the window.
+    $hits = array_values(array_filter($hits, static fn($t) => $now - (int)$t < $window));
+
+    if (count($hits) >= $limit) {
+        $_SESSION[$key] = $hits;
+        return false;
+    }
+
+    $hits[] = $now;
+    $_SESSION[$key] = $hits;
+
+    return true;
 }
 
 /**
@@ -589,7 +638,7 @@ function captcha_local_verify(?string $answer): bool
     if (!$challenge || !isset($challenge['code'], $challenge['issued'])) {
         return false;
     }
-    if (time() - (int)$challenge['issued'] > 600) {
+    if (time() - (int)$challenge['issued'] > CAPTCHA_TTL_SECONDS) {
         return false;
     }
 

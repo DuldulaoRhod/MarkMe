@@ -27,15 +27,6 @@ $here = current_path();
     <div class="modal-dialog modal-dialog-centered auth-modal-dialog">
         <div class="modal-content auth-modal-content">
             <button type="button" class="btn-close auth-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            <div class="auth-visual">
-                <div class="brand-mark">MarkMe</div>
-                <blockquote>"Every page you've loved deserves a bookmark that's just as personal."</blockquote>
-                <div class="auth-shapes" aria-hidden="true">
-                    <span style="background:var(--gold);height:108px"></span>
-                    <span style="background:var(--accent);height:128px"></span>
-                    <span style="background:var(--cream);height:96px"></span>
-                </div>
-            </div>
             <div class="auth-form-panel">
                 <h1 id="loginModalLabel">Welcome back</h1>
                 <p class="subtitle">Log in to keep designing and tracking your bookmarks.</p>
@@ -67,6 +58,14 @@ $here = current_path();
                         <label class="form-label" for="loginPassword">Password</label>
                         <input type="password" id="loginPassword" name="password" class="form-control" autocomplete="current-password" required>
                     </div>
+                    <?php /* Signing in is checked too, not just registering: an
+                             unprotected login form is the one a script actually
+                             wants, because that is where passwords get guessed.
+                             customer/login.php verifies it server-side before it
+                             looks at the password. */ ?>
+                    <?php $captchaId = 'loginCaptcha';
+                          require __DIR__ . '/captcha_field.php'; ?>
+
                     <button type="submit" class="btn btn-primary btn-lg btn-block">Log in</button>
                 </form>
                 <?php if (setting('allow_registration', '1') === '1'): ?>
@@ -82,18 +81,9 @@ $here = current_path();
 <!-- Register Modal — only rendered while signups are open. -->
 <?php if (setting('allow_registration', '1') === '1'): ?>
 <div class="modal fade" id="registerModal" tabindex="-1" aria-labelledby="registerModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered auth-modal-dialog auth-modal-dialog-wide">
+    <div class="modal-dialog modal-dialog-centered auth-modal-dialog">
         <div class="modal-content auth-modal-content">
             <button type="button" class="btn-close auth-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            <div class="auth-visual">
-                <div class="brand-mark">MarkMe</div>
-                <blockquote>"Join MarkMe and start designing a bookmark that tells your story."</blockquote>
-                <div class="auth-shapes" aria-hidden="true">
-                    <span style="background:var(--gold);height:108px"></span>
-                    <span style="background:var(--accent);height:128px"></span>
-                    <span style="background:var(--cream);height:96px"></span>
-                </div>
-            </div>
             <div class="auth-form-panel">
                 <h1 id="registerModalLabel">Create an account</h1>
                 <p class="subtitle">It only takes a minute to start personalizing.</p>
@@ -152,29 +142,8 @@ $here = current_path();
                         <?php endforeach; ?>
                     </ul>
 
-                    <?php if (captcha_mode() === 'recaptcha'): ?>
-                        <div class="g-recaptcha" style="margin-top:var(--s-5)"
-                             data-sitekey="<?= e(RECAPTCHA_SITE_KEY) ?>"></div>
-                        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-                    <?php elseif (captcha_mode() === 'local'): ?>
-                        <!-- The answer is only ever in the session; this markup
-                             carries the picture, never the code. -->
-                        <div class="captcha-row">
-                            <img src="<?= BASE_URL ?>/auth/captcha_image.php" alt=""
-                                 class="captcha-img" width="190" height="60" data-captcha-img>
-                            <button type="button" class="btn-icon captcha-reload" data-captcha-reload
-                                    aria-label="Get a different image">
-                                <?= icon('refresh', 17) ?>
-                            </button>
-                            <div class="captcha-field">
-                                <label class="form-label" for="regCaptcha">Type the characters</label>
-                                <input type="text" id="regCaptcha" name="captcha_answer"
-                                       class="form-control" autocomplete="off" spellcheck="false"
-                                       maxlength="8" required
-                                       style="text-transform:uppercase;letter-spacing:.18em">
-                            </div>
-                        </div>
-                    <?php endif; ?>
+                    <?php $captchaId = 'regCaptcha';
+                          require __DIR__ . '/captcha_field.php'; ?>
 
                     <button type="submit" class="btn btn-primary btn-lg btn-block" style="margin-top:var(--s-6)">Create account</button>
                 </form>

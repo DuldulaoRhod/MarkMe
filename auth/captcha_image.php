@@ -14,6 +14,15 @@
  */
 require_once __DIR__ . '/../includes/security.php';
 
+/* Each refresh issues a fresh challenge, which costs a drawing pass. Without a
+   ceiling the reload button is a free way to spin the server. */
+if (!captcha_rate_ok('image')) {
+    http_response_code(429);
+    header('Retry-After: 30');
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Too many requests. Please wait a moment and try again.');
+}
+
 $code = captcha_local_issue();
 
 $w = 190;

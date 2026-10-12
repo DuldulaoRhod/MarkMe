@@ -17,3 +17,8 @@
 .DS_Store
 Thumbs.db
 .claude/
+
+# Synthesised CAPTCHA speech, cached per character on first use. Regenerated
+# automatically from the installed voice, and machine-specific, so it is build
+# output rather than source.
+/storage/captcha_voice/

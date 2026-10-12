@@ -175,18 +175,11 @@
     border-top: 1px dashed var(--border);
   }
 
+  /* The decorative panel these rules used to stack is gone; the dialog is a
+     single column at every width now. */
   .auth-modal-content {
-    flex-direction: column;
     max-height: 92vh;
     overflow-y: auto;
-  }
-  .auth-visual {
-    flex: none;
-    padding: var(--s-6);
-    gap: var(--s-6);
-  }
-  .auth-visual .auth-shapes {
-    display: none;
   }
   .auth-form-panel {
     padding: var(--s-6);

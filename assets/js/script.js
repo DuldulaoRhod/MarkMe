@@ -1692,16 +1692,86 @@ $$("[data-password-policy]").forEach((list) => {
 })();
 
 /* --------------------------------------------------- captcha refresh */
-$$("[data-captcha-reload]").forEach((button) => {
-  const img = $("[data-captcha-img]", button.parentElement) || $("[data-captcha-img]");
+/* The CAPTCHA control: refresh, and the audio alternative.
+
+   Scoped to each [data-captcha] block, because the sign-in and registration
+   forms both exist in the page at once and each has its own image, button and
+   status line. */
+$$("[data-captcha]").forEach((block) => {
+  const img = $("[data-captcha-img]", block);
+  const reload = $("[data-captcha-reload]", block);
+  const audioBtn = $("[data-captcha-audio]", block);
+  const status = $("[data-captcha-status]", block);
+  const answer = $("input[name='captcha_answer']", block);
   if (!img) return;
 
-  button.addEventListener("click", () => {
+  let player = null;
+
+  const say = (message) => {
+    if (status) status.textContent = message || "";
+  };
+
+  const refresh = () => {
     // A new query string, because the response is sent no-store and the
     // server issues a fresh code on every render.
     img.src = img.src.split("?")[0] + "?r=" + Date.now();
-    button.classList.add("is-spinning");
-    setTimeout(() => button.classList.remove("is-spinning"), 420);
+    // The old clip read the old code; stop it rather than let it mislead.
+    if (player) {
+      player.pause();
+      player = null;
+    }
+    if (answer) answer.value = "";
+    say("A new code has been loaded.");
+  };
+
+  reload?.addEventListener("click", () => {
+    refresh();
+    reload.classList.add("is-spinning");
+    setTimeout(() => reload.classList.remove("is-spinning"), 420);
+  });
+
+  audioBtn?.addEventListener("click", async () => {
+    if (player) {           // pressed again while playing: stop
+      player.pause();
+      player = null;
+      say("");
+      return;
+    }
+
+    audioBtn.classList.add("is-busy");
+    say("Loading the audio…");
+    try {
+      // Fetched rather than set as a src so a 409 or a 429 can be reported in
+      // words instead of failing silently as a dead button.
+      const res = await fetch(img.src.split("/auth/")[0] + "/auth/captcha_audio.php?r=" + Date.now(),
+        { credentials: "same-origin", cache: "no-store" });
+      if (!res.ok) {
+        say(res.status === 429
+          ? "Too many requests. Please wait a moment."
+          : "No code is waiting — refresh the image, then try again.");
+        return;
+      }
+      /* The server says which it sent. Where no speech engine is installed it
+         falls back to a tone code, and the listener needs to be told which one
+         is about to play rather than being left to work it out. */
+      const kind = res.headers.get("X-Captcha-Audio") || "speech";
+      const url = URL.createObjectURL(await res.blob());
+      player = new Audio(url);
+      player.addEventListener("ended", () => {
+        URL.revokeObjectURL(url);
+        player = null;
+        say("");
+      }, { once: true });
+      say(kind === "speech"
+        ? "Playing: the characters are read out one at a time."
+        : "Playing: no voice is available here, so each character is two tones.");
+      await player.play();
+    } catch (err) {
+      say("The audio could not be played.");
+      player = null;
+    } finally {
+      audioBtn.classList.remove("is-busy");
+    }
   });
 });
 
@@ -1860,6 +1930,7 @@ const phLocations = () => {
   const cancelBtn = $("[data-confirm-cancel]", dialog);
 
   let pendingForm = null;
+  let pendingSubmitter = null;
   let lastFocused = null;
 
   const close = () => {
@@ -1867,11 +1938,13 @@ const phLocations = () => {
     backdrop.hidden = true;
     document.body.classList.remove("confirm-open");
     pendingForm = null;
+    pendingSubmitter = null;
     if (lastFocused && lastFocused.focus) lastFocused.focus();
   };
 
-  const open = (form) => {
+  const open = (form, submitter) => {
     pendingForm = form;
+    pendingSubmitter = submitter || null;
     lastFocused = document.activeElement;
 
     const d = form.dataset;
@@ -1900,18 +1973,40 @@ const phLocations = () => {
     if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-confirm")) return;
     if (form.dataset.confirmed === "yes") return;   // second pass, let it go
     e.preventDefault();
-    open(form);
+    /* Which button was pressed is part of the submission: Review Uploads has
+       one form with a Reject button carrying name="decision". Lose the button
+       and the server is handed a form with no decision in it. */
+    open(form, e.submitter);
   });
 
   okBtn.addEventListener("click", () => {
     if (!pendingForm) return;
     const form = pendingForm;
+    const submitter = pendingSubmitter;
     form.dataset.confirmed = "yes";
     close();
-    // requestSubmit keeps any submit button's name/value, which a bare
-    // submit() would drop.
-    if (form.requestSubmit) form.requestSubmit();
-    else form.submit();
+
+    /* requestSubmit() only carries a button's name and value when that button
+       is passed as the submitter. Called bare - as this used to be - the form
+       submits as though nothing was clicked, which is why rejecting an upload
+       arrived with no decision field and came back "Unknown decision."
+       Approving was unaffected only because its form has no confirmation step
+       and so submitted natively.
+
+       Without requestSubmit the value is carried in a hidden field instead,
+       since form.submit() has no way to name a submitter. */
+    if (form.requestSubmit) {
+      form.requestSubmit(submitter && submitter.form === form ? submitter : undefined);
+    } else {
+      if (submitter && submitter.name) {
+        const carry = document.createElement("input");
+        carry.type = "hidden";
+        carry.name = submitter.name;
+        carry.value = submitter.value;
+        form.appendChild(carry);
+      }
+      form.submit();
+    }
   });
 
   cancelBtn.addEventListener("click", close);
