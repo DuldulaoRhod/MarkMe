@@ -24,8 +24,39 @@ if (!$pending) {
 
 $returnTo = safe_local_path($_GET['return'] ?? $_POST['return_to'] ?? null);
 $error = null;
+$notice = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+/* The account being challenged, read once. Only what this page needs: the
+   secret is fetched in the POST branch and never rendered. */
+$challenged = db()->prepare(
+    'SELECT user_id, username, email, full_name, mfa_method FROM users WHERE user_id = :id'
+);
+$challenged->execute(['id' => $pending['user_id']]);
+$challenged = $challenged->fetch() ?: null;
+$method = $challenged['mfa_method'] ?? 'totp';
+
+/* An emailed code has to be sent before it can be typed. Sent when the
+   challenge opens, and again only when asked - email_otp_issue() enforces the
+   cooldown, so holding down the button cannot fill an inbox. */
+$wantsResend = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['resend']);
+if ($method === 'email' && $challenged && ($wantsResend || empty($_SESSION['mfa_code_sent']))) {
+    if ($wantsResend) {
+        csrf_check();
+    }
+    $sent = email_otp_send($challenged);
+    $_SESSION['mfa_code_sent'] = true;
+    if ($sent['sent']) {
+        $notice = 'A code has been emailed to you. It expires in five minutes.';
+    } else {
+        // Never claims a send that did not happen.
+        $error = $sent['reason'];
+    }
+    if ($wantsResend) {
+        $wantsResend = false;   // handled; do not fall through to verification
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['resend'])) {
     csrf_check();
 
     $code = trim($_POST['code'] ?? '');
@@ -35,13 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt->fetch();
 
     if (!$user) {
-        unset($_SESSION['mfa_pending']);
+        unset($_SESSION['mfa_pending'], $_SESSION['mfa_code_sent']);
         flash_set('login_error', 'That account is no longer available.');
         flash_set('reopen_modal', 'login');
         redirect('/customer/index.php');
     }
 
-    if (totp_verify((string)$user['mfa_secret'], $code)) {
+    /* Which factor this account uses decides what the code is checked
+       against. An authenticator app's code is derived from a shared secret; an
+       emailed code is a row with its own expiry and attempt ceiling. Both are
+       verified here, on the server, before any session exists. */
+    $verified = ($user['mfa_method'] ?? 'totp') === 'email'
+        ? email_otp_verify((int)$user['user_id'], $code)['ok']
+        : totp_verify((string)$user['mfa_secret'], $code);
+
+    if ($verified) {
         establish_session($user);
 
         $destination = in_array($user['role'], ['admin', 'staff'], true)
@@ -73,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user,
             'Authentication'
         );
-        unset($_SESSION['mfa_pending']);
+        unset($_SESSION['mfa_pending'], $_SESSION['mfa_code_sent']);
         flash_set('login_error', 'This account is now locked. An administrator must unlock it.');
         flash_set('reopen_modal', 'login');
         redirect('/customer/index.php');
@@ -103,9 +142,17 @@ $pageTitle = 'Two-factor authentication';
 
     <h1 style="font-size:1.35rem;margin-bottom:var(--s-2)">Enter your code</h1>
     <p class="text-muted" style="font-size:.92rem;margin-bottom:var(--s-6)">
-        Signing in as <strong><?= e($pending['username']) ?></strong>. Open your authenticator
-        app and enter the current 6-digit code.
+        Signing in as <strong><?= e($pending['username']) ?></strong>.
+        <?= $method === 'email'
+            ? 'Enter the 6-digit code we emailed you.'
+            : 'Open your authenticator app and enter the current 6-digit code.' ?>
     </p>
+
+    <?php if ($notice): ?>
+        <div class="alert alert-success d-flex gap-2 align-items-start" role="status">
+            <?= icon('check-circle', 18) ?><span><?= e($notice) ?></span>
+        </div>
+    <?php endif; ?>
 
     <?php if ($error): ?>
         <div class="alert alert-danger d-flex gap-2 align-items-start" role="alert">
@@ -127,6 +174,18 @@ $pageTitle = 'Two-factor authentication';
             <?= icon('shield', 17) ?> Verify
         </button>
     </form>
+
+    <?php if ($method === 'email'): ?>
+        <?php /* Its own form, so pressing it cannot be mistaken for submitting
+                 a code. The cooldown lives in email_otp_issue(), not here. */ ?>
+        <form method="post" style="margin-top:var(--s-4)">
+            <?= csrf_field() ?>
+            <input type="hidden" name="return_to" value="<?= e($returnTo) ?>">
+            <button type="submit" name="resend" value="1" class="btn btn-quiet btn-sm btn-block">
+                <?= icon('refresh', 15) ?> Email me a new code
+            </button>
+        </form>
+    <?php endif; ?>
 
     <p style="text-align:center;margin-top:var(--s-6);font-size:.88rem">
         <a href="<?= BASE_URL ?>/customer/logout.php">Cancel and sign out</a>

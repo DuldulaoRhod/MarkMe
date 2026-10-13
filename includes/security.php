@@ -820,3 +820,166 @@ function request_user_agent(): string
 {
     return mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
 }
+
+/* ===================================================================
+ * Email one-time codes
+ *
+ * A second factor for accounts that cannot or will not use an authenticator
+ * app. Deliberately strict: six digits is a small space, so the code is short
+ * lived, single use, guess limited, and rationed per account.
+ *
+ * Only the hash is stored. The code itself exists in exactly two places - the
+ * email that was sent, and the request that answers the challenge - and in
+ * neither case is it written to the database or the audit log.
+ * =================================================================== */
+
+/** How long a code is good for. Short, because email arrives in seconds. */
+const EMAIL_OTP_TTL_SECONDS = 300;
+
+/** Guesses allowed before the code is spent. */
+const EMAIL_OTP_MAX_ATTEMPTS = 5;
+
+/** Smallest gap between codes for one account. */
+const EMAIL_OTP_COOLDOWN_SECONDS = 60;
+
+/**
+ * Is email as a second factor actually usable here?
+ *
+ * Without SMTP a code would be written to the local outbox and never reach
+ * anybody, which is not a second factor - it is a locked door. The option is
+ * offered only when mail can really be sent.
+ */
+function email_otp_available(): bool
+{
+    return mail_configured();
+}
+
+/**
+ * Issue a code, returning it so the caller can send it.
+ *
+ * Returns null when the account asked too recently; the caller reports the
+ * cooldown rather than silently doing nothing.
+ */
+function email_otp_issue(int $userId): ?string
+{
+    $recent = db()->prepare(
+        'SELECT COUNT(*) FROM email_otps
+          WHERE user_id = :id AND created_at > DATE_SUB(NOW(), INTERVAL :secs SECOND)'
+    );
+    $recent->bindValue('id', $userId, PDO::PARAM_INT);
+    $recent->bindValue('secs', EMAIL_OTP_COOLDOWN_SECONDS, PDO::PARAM_INT);
+    $recent->execute();
+    if ((int)$recent->fetchColumn() > 0) {
+        return null;
+    }
+
+    // Any earlier code stops working now, so only the newest one is live.
+    db()->prepare('DELETE FROM email_otps WHERE user_id = :id')
+        ->execute(['id' => $userId]);
+
+    // random_int, not rand: this is a credential.
+    $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+    $stmt = db()->prepare(
+        'INSERT INTO email_otps (user_id, code_hash, expires_at)
+         VALUES (:id, :hash, DATE_ADD(NOW(), INTERVAL :secs SECOND))'
+    );
+    $stmt->bindValue('id', $userId, PDO::PARAM_INT);
+    $stmt->bindValue('hash', hash('sha256', $code));
+    $stmt->bindValue('secs', EMAIL_OTP_TTL_SECONDS, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $code;
+}
+
+/**
+ * Check a submitted code.
+ *
+ * Expiry, single use and the attempt ceiling are all enforced here rather than
+ * by the caller remembering to. A wrong guess costs an attempt whether or not
+ * the code was ever right, so guessing is bounded.
+ *
+ * @return array{ok: bool, reason: string}
+ */
+function email_otp_verify(int $userId, string $code): array
+{
+    $code = preg_replace('/\D/', '', $code) ?? '';
+
+    $stmt = db()->prepare(
+        'SELECT otp_id, code_hash, attempts, expires_at, used_at
+           FROM email_otps
+          WHERE user_id = :id
+          ORDER BY otp_id DESC
+          LIMIT 1'
+    );
+    $stmt->execute(['id' => $userId]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        return ['ok' => false, 'reason' => 'No code is waiting. Ask for a new one.'];
+    }
+    if ($row['used_at'] !== null) {
+        return ['ok' => false, 'reason' => 'That code has already been used. Ask for a new one.'];
+    }
+    if (strtotime((string)$row['expires_at']) < time()) {
+        return ['ok' => false, 'reason' => 'That code has expired. Ask for a new one.'];
+    }
+    if ((int)$row['attempts'] >= EMAIL_OTP_MAX_ATTEMPTS) {
+        return ['ok' => false, 'reason' => 'Too many attempts. Ask for a new code.'];
+    }
+
+    // The attempt is recorded before the comparison, so an abandoned request
+    // still costs a guess.
+    db()->prepare('UPDATE email_otps SET attempts = attempts + 1 WHERE otp_id = :id')
+        ->execute(['id' => (int)$row['otp_id']]);
+
+    if (strlen($code) !== 6 || !hash_equals((string)$row['code_hash'], hash('sha256', $code))) {
+        $left = EMAIL_OTP_MAX_ATTEMPTS - ((int)$row['attempts'] + 1);
+        return [
+            'ok' => false,
+            'reason' => 'That code is not right.'
+                . ($left > 0 ? ' ' . $left . ' ' . ($left === 1 ? 'try' : 'tries') . ' left.' : ''),
+        ];
+    }
+
+    // Spent on success, so the same code cannot be replayed.
+    db()->prepare('UPDATE email_otps SET used_at = NOW() WHERE otp_id = :id')
+        ->execute(['id' => (int)$row['otp_id']]);
+
+    return ['ok' => true, 'reason' => ''];
+}
+
+/**
+ * Issue a code and email it.
+ *
+ * Never reports a send that did not happen: mail_send() says whether it left
+ * the building, and that answer is passed straight back.
+ *
+ * @return array{sent: bool, reason: string}
+ */
+function email_otp_send(array $user): array
+{
+    $code = email_otp_issue((int)$user['user_id']);
+    if ($code === null) {
+        return ['sent' => false, 'reason' => 'A code was sent moments ago. Please wait before asking for another.'];
+    }
+
+    $name = $user['full_name'] ?: $user['username'];
+    $minutes = (int)(EMAIL_OTP_TTL_SECONDS / 60);
+
+    $result = mail_send(
+        (string)$user['email'],
+        'Your MarkMe sign-in code',
+        "Hello {$name},\n\n"
+        . "Your sign-in code is: {$code}\n\n"
+        . "It expires in {$minutes} minutes and can be used once.\n"
+        . "If you did not try to sign in, you can ignore this message and your "
+        . "account stays as it is.\n\n"
+        . "MarkMe\n"
+    );
+
+    return [
+        'sent' => $result['sent'],
+        'reason' => $result['sent'] ? '' : 'The code could not be emailed.',
+    ];
+}

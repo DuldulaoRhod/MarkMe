@@ -45,7 +45,27 @@ $here = current_path();
                         </a>
                     </div>
                 <?php endif; ?>
-                <?php if ($loginError): ?><div class="alert alert-danger d-flex gap-2 align-items-start" role="alert"><?= icon("alert", 18) ?><span><?= e($loginError) ?></span></div><?php endif; ?>
+                <?php if ($loginError): ?>
+                    <div class="alert alert-danger d-flex gap-2 align-items-start" role="alert">
+                        <?= icon("alert", 18) ?><span><?= e($loginError) ?></span>
+                    </div>
+                    <?php /* "Check your email for the activation link" is a dead end once
+                             that link has expired, so the way out is offered right where
+                             the problem is stated. The identifier already typed is reused,
+                             so nobody has to remember which address they registered with. */ ?>
+                    <?php if (stripos($loginError, 'not been activated') !== false): ?>
+                        <form method="post" action="<?= BASE_URL ?>/auth/resend_activation.php"
+                              class="resend-activation">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="identifier"
+                                   value="<?= e($loginOldIdentifier ?? '') ?>">
+                            <input type="hidden" name="return_to" value="<?= e($loginReturnTo ?? $here) ?>">
+                            <button type="submit" class="btn btn-secondary btn-sm btn-block">
+                                <?= icon('refresh', 15) ?> Send me a new activation link
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                <?php endif; ?>
 
                 <form method="post" action="<?= BASE_URL ?>/customer/login.php">
                     <?= csrf_field() ?>

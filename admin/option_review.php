@@ -13,9 +13,9 @@
  * hidden is never what keeps anyone out.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_can('options.manage');
+require_can('options.view');
 
-$requireCapability = 'options.manage';
+$requireCapability = 'options.view';
 $pageTitle = 'Review Uploads';
 require __DIR__ . '/includes/admin_header.php';
 
@@ -28,27 +28,40 @@ if (!in_array($filter, ['pending', 'approved', 'rejected', 'all'], true)) {
  * Both catalogs answer the same questions, so they are read with the same
  * query shape and merged into one queue ordered by age.
  */
-$rows = [];
-foreach ([['shapes', 'shape_id', 'shape'], ['designs', 'design_id', 'design']] as [$table, $key, $kind]) {
-    $where = $filter === 'all' ? '' : ' WHERE o.status = :status';
-    $stmt = db()->prepare(
-        "SELECT o.{$key} AS id, o.name, o.category, o.image_path, o.status, o.created_at,
-                o.reviewed_at, o.review_note, o.virus_scanned,
-                up.username AS uploader, rv.username AS reviewer
-           FROM {$table} o
-           LEFT JOIN users up ON up.user_id = o.uploaded_by
-           LEFT JOIN users rv ON rv.user_id = o.reviewed_by
-           {$where}
-          ORDER BY o.created_at DESC"
-    );
-    $stmt->execute($filter === 'all' ? [] : ['status' => $filter]);
-    foreach ($stmt->fetchAll() as $row) {
-        $row['kind'] = $kind;
-        $row['folder'] = $table;
-        $rows[] = $row;
-    }
-}
-usort($rows, static fn($a, $b) => strcmp((string)$b['created_at'], (string)$a['created_at']));
+/* The two catalogs are read as one set with UNION ALL rather than fetched
+   separately and merged in PHP. The difference matters once there is paging:
+   merging in PHP means reading every shape and every design to show ten of
+   them, and "the newest ten overall" cannot be worked out from the newest ten
+   of each. The database orders and limits the combined set instead.
+   
+   The table names are literals written here, not request values. The status is
+   bound - twice, once per branch of the union, because a placeholder cannot be
+   reused across both halves in every driver configuration. */
+$whereShape = $filter === 'all' ? '' : ' WHERE o.status = :status_s';
+$whereDesign = $filter === 'all' ? '' : ' WHERE o.status = :status_d';
+
+$columns = "SELECT o.%s AS id, o.name, o.category, o.image_path, o.status, o.created_at,
+                   o.reviewed_at, o.review_note, o.virus_scanned,
+                   up.username AS uploader, rv.username AS reviewer,
+                   '%s' AS kind, '%s' AS folder
+              FROM %s o
+              LEFT JOIN users up ON up.user_id = o.uploaded_by
+              LEFT JOIN users rv ON rv.user_id = o.reviewed_by%s";
+
+$unionSql = sprintf($columns, 'shape_id', 'shape', 'shapes', 'shapes', $whereShape)
+    . ' UNION ALL '
+    . sprintf($columns, 'design_id', 'design', 'designs', 'designs', $whereDesign);
+
+$countSql = "SELECT (SELECT COUNT(*) FROM shapes o{$whereShape})
+                  + (SELECT COUNT(*) FROM designs o{$whereDesign})";
+
+$params = $filter === 'all' ? [] : ['status_s' => $filter, 'status_d' => $filter];
+
+/* id is part of the order as well as created_at: the two catalogs number
+   independently, so without it two rows created in the same second could swap
+   between pages. */
+$pager = paginate($countSql, $unionSql, $params, 'ORDER BY created_at DESC, kind ASC, id DESC');
+$rows = $pager['rows'];
 
 /** Counts for the filter pills, so the queue says how much is waiting. */
 $tally = ['pending' => 0, 'approved' => 0, 'rejected' => 0];
@@ -171,6 +184,9 @@ $pills = [
             </article>
         <?php endforeach; ?>
     </div>
+
+    <?php $pagerLabel = 'submission';
+          require __DIR__ . '/../includes/backoffice/pager.php'; ?>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../includes/backoffice/shell_footer.php'; ?>

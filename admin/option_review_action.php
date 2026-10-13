@@ -11,7 +11,10 @@
  * live is never altered by reviewing a different submission.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_can('options.manage');
+/* Approving and rejecting are separate grants: someone may be trusted to
+   clear obvious rejects without being able to publish new artwork. The
+   decision is validated below before it is used for anything else. */
+require_can(($_POST['decision'] ?? '') === 'approve' ? 'options.approve' : 'options.reject');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('/admin/option_review.php');

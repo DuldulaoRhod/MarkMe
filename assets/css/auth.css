@@ -150,3 +150,9 @@
     animation: none;
   }
 }
+
+/* Offered only when the sign-in failed because the account is not activated,
+   so it sits under that message rather than cluttering the form. */
+.resend-activation {
+  margin: calc(var(--s-3) * -1) 0 var(--s-4);
+}
