@@ -12,24 +12,29 @@
 ?>
 <?php 
 $search = trim($_GET['q'] ?? '');
-$sql = "SELECT u.*, COUNT(o.order_id) AS order_count,
-               COALESCE(SUM(CASE WHEN o.status != 'Cancelled' THEN o.total_amount ELSE 0 END), 0) AS spent
-        FROM users u
-        LEFT JOIN orders o ON o.user_id = u.user_id
-        WHERE u.role = 'customer'";
+$from = " FROM users u
+           LEFT JOIN orders o ON o.user_id = u.user_id
+           WHERE u.role = 'customer'";
 $params = [];
 if ($search !== '') {
-    $sql .= ' AND (u.username LIKE :s_user OR u.email LIKE :s_mail OR u.full_name LIKE :s_name)';
+    $from .= ' AND (u.username LIKE :s_user OR u.email LIKE :s_mail OR u.full_name LIKE :s_name)';
     $like = '%' . $search . '%';
     $params['s_user'] = $like;
     $params['s_mail'] = $like;
     $params['s_name'] = $like;
 }
-$sql .= ' GROUP BY u.user_id ORDER BY u.created_at DESC';
 
-$stmt = db()->prepare($sql);
-$stmt->execute($params);
-$customers = $stmt->fetchAll();
+// DISTINCT for the same reason as orders: the join to orders multiplies a
+// customer by how much they have bought.
+$pager = paginate(
+    'SELECT COUNT(DISTINCT u.user_id)' . $from,
+    "SELECT u.*, COUNT(o.order_id) AS order_count,
+            COALESCE(SUM(CASE WHEN o.status != 'Cancelled' THEN o.total_amount ELSE 0 END), 0) AS spent"
+        . $from . ' GROUP BY u.user_id',
+    $params,
+    'ORDER BY u.created_at DESC, u.user_id DESC'
+);
+$customers = $pager['rows'];
 ?>
 
 <div class="page-head">
@@ -139,3 +144,5 @@ $customers = $stmt->fetchAll();
         </table>
     </div>
 </div>
+
+<?php $pagerLabel = 'customer'; require __DIR__ . '/../pager.php'; ?>

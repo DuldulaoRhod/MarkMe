@@ -14,19 +14,36 @@ if ($editId) {
     $editing = $stmt->fetch() ?: null;
 }
 
-$rows = db()->query("SELECT * FROM {$opt['table']} ORDER BY name")->fetchAll();
-
-/* Where the edited row sits in the list, so the carousel can open on it
-   rather than at the start with the selection paged off screen. */
-$selectedIndex = 0;
+/* The table and id column come from $opt, which each catalog page writes -
+   never from the request - so they are safe to interpolate. */
+/* When a row is opened for editing, start on the page that holds it rather
+   than on page 1 with the selection paged out of sight - the carousel used to
+   scroll to it, and the grid needs the same courtesy. Its position is counted
+   in the same order the list is sorted by. */
+$startPage = null;
 if ($editing) {
-    foreach ($rows as $i => $row) {
-        if ((int)$row[$opt['idColumn']] === (int)$editing[$opt['idColumn']]) {
-            $selectedIndex = $i;
-            break;
-        }
-    }
+    /* The name is bound twice under two names: with emulated prepares off, a
+       named placeholder may not be reused within one statement. */
+    $rank = db()->prepare(
+        "SELECT COUNT(*) FROM {$opt['table']}
+          WHERE name < :n1 OR (name = :n2 AND {$opt['idColumn']} < :id)"
+    );
+    $rank->execute([
+        'n1' => $editing['name'],
+        'n2' => $editing['name'],
+        'id' => (int)$editing[$opt['idColumn']],
+    ]);
+    $startPage = (int)floor((int)$rank->fetchColumn() / page_size()) + 1;
 }
+
+$pager = paginate(
+    "SELECT COUNT(*) FROM {$opt['table']}",
+    "SELECT * FROM {$opt['table']}",
+    [],
+    "ORDER BY name ASC, {$opt['idColumn']} ASC",
+    $startPage
+);
+$rows = $pager['rows'];
 
 $self = BASE_URL . '/admin/' . basename($_SERVER['SCRIPT_NAME']);
 ?>
@@ -49,7 +66,9 @@ $self = BASE_URL . '/admin/' . basename($_SERVER['SCRIPT_NAME']);
     <div class="panel-head">
         <h2><?= e($opt['plural']) ?></h2>
         <p class="form-text">
-            <?= count($rows) ?> in the catalog
+            <?php /* The whole catalog, not the rows on this page - the pager
+                     below says which of them you are looking at. */ ?>
+            <?= (int)$pager['total'] ?> in the catalog
         </p>
     </div>
     <div class="panel-body">
@@ -60,57 +79,56 @@ $self = BASE_URL . '/admin/' . basename($_SERVER['SCRIPT_NAME']);
                 <p>Add your first one in the form below.</p>
             </div>
         <?php else: ?>
-            <!-- Four to a view rather than running down the page: these are
-                 pictures you browse, and a short row is faster to scan. -->
-            <div class="carousel admin-carousel option-tile-carousel" data-carousel
-                 data-per-view="4 3 2"
-                 data-min-card="96"
-                 data-carousel-start="<?= (int)$selectedIndex ?>"
-                 data-carousel-item=".option-tile">
-                <button type="button" class="carousel-nav prev" data-carousel-prev
-                        aria-label="Previous <?= e(strtolower($opt['plural'])) ?>"><?= icon('chevron-left', 18) ?></button>
-                <div class="carousel-viewport">
-                    <div class="carousel-track" data-carousel-track data-reveal-grid>
-                        <?php foreach ($rows as $row): ?>
-                            <?php $rowId = (int)$row[$opt['idColumn']]; ?>
-                            <?php $isSelected = $editing
-                                && (int)$editing[$opt['idColumn']] === $rowId; ?>
-                            <article class="option-tile<?= $isSelected ? ' is-selected' : '' ?>"
-                                     <?= $isSelected ? 'aria-current="true"' : '' ?>>
-                                <?php if ($isSelected): ?>
-                                    <span class="option-tile-flag" aria-hidden="true"><?= icon('check', 13) ?></span>
-                                    <span class="visually-hidden">Currently being edited</span>
-                                <?php endif; ?>
-                                <div class="option-tile-media">
-                                    <img src="<?= upload_url($opt['folder'], $row['image_path']) ?>"
-                                         alt="<?= e($row['name']) ?>" loading="lazy" decoding="async">
-                                </div>
-                                <div class="option-tile-body">
-                                    <h3 class="option-tile-name"><?= e($row['name']) ?></h3>
-                                    <div class="option-tile-actions">
-                                        <a class="btn-icon btn-icon-sm" href="<?= e($self) ?>?edit=<?= $rowId ?>"
-                                           aria-label="Edit <?= e($row['name']) ?>"><?= icon('edit', 14) ?></a>
-                                        <form method="post" action="<?= BASE_URL ?>/admin/<?= e($opt['deleteAction']) ?>"
-                                              data-confirm
-                                              data-confirm-title="Delete <?= e(strtolower($opt['singular'])) ?>?"
-                                              data-confirm-body="Delete &quot;<?= e($row['name']) ?>&quot;?"
-                                              data-confirm-action="Delete"
-                                              data-confirm-tone="danger">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="<?= e($opt['idColumn']) ?>" value="<?= $rowId ?>">
-                                            <button type="submit" class="btn-icon btn-icon-sm btn-icon-danger"
-                                                    aria-label="Delete <?= e($row['name']) ?>"><?= icon('trash', 14) ?></button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </article>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-                <button type="button" class="carousel-nav next" data-carousel-next
-                        aria-label="More <?= e(strtolower($opt['plural'])) ?>"><?= icon('chevron-right', 18) ?></button>
+            <?php /* A grid, the same shape the review queue uses.
+                     
+                     This was a carousel: four tiles at a time with arrows to
+                     scroll through the rest. That was fine while the whole
+                     catalog arrived in one response, but it pages horizontally
+                     through the rows on this page, and the pager below pages
+                     between pages - two different meanings of "next" on one
+                     screen. The grid shows the page, and the pager moves
+                     between pages. */ ?>
+            <div class="option-grid" data-reveal-grid>
+                <?php foreach ($rows as $row): ?>
+                    <?php $rowId = (int)$row[$opt['idColumn']]; ?>
+                    <?php $isSelected = $editing
+                        && (int)$editing[$opt['idColumn']] === $rowId; ?>
+                    <article class="option-tile<?= $isSelected ? ' is-selected' : '' ?>"
+                             <?= $isSelected ? 'aria-current="true"' : '' ?>>
+                        <?php if ($isSelected): ?>
+                            <span class="option-tile-flag" aria-hidden="true"><?= icon('check', 13) ?></span>
+                            <span class="visually-hidden">Currently being edited</span>
+                        <?php endif; ?>
+                        <div class="option-tile-media">
+                            <img src="<?= upload_url($opt['folder'], $row['image_path']) ?>"
+                                 alt="<?= e($row['name']) ?>" loading="lazy" decoding="async">
+                        </div>
+                        <div class="option-tile-body">
+                            <h3 class="option-tile-name"><?= e($row['name']) ?></h3>
+                            <div class="option-tile-actions">
+                                <a class="btn-icon btn-icon-sm" href="<?= e($self) ?>?edit=<?= $rowId ?>"
+                                   aria-label="Edit <?= e($row['name']) ?>"><?= icon('edit', 14) ?></a>
+                                <form method="post" action="<?= BASE_URL ?>/admin/<?= e($opt['deleteAction']) ?>"
+                                      data-confirm
+                                      data-confirm-title="Delete <?= e(strtolower($opt['singular'])) ?>?"
+                                      data-confirm-body="Delete &quot;<?= e($row['name']) ?>&quot;?"
+                                      data-confirm-action="Delete"
+                                      data-confirm-tone="danger">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="<?= e($opt['idColumn']) ?>" value="<?= $rowId ?>">
+                                    <button type="submit" class="btn-icon btn-icon-sm btn-icon-danger"
+                                            aria-label="Delete <?= e($row['name']) ?>"><?= icon('trash', 14) ?></button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
             </div>
         <?php endif; ?>
+
+        <?php /* Below the grid. */ ?>
+        <?php $pagerLabel = strtolower($opt['singular']);
+              require __DIR__ . '/../../includes/backoffice/pager.php'; ?>
     </div>
 </section>
 

@@ -11,9 +11,15 @@
  * administrator's view.
  */
 require_once __DIR__ . '/../includes/auth.php';
-require_can('security.manage');
+/* Its own permission rather than security.manage, which also gates the
+   security screen and the user viewer. Reading the audit trail is something a
+   staff member can reasonably be granted; changing security policy is not. */
+require_can('audit.view');
 
-$requireCapability = 'security.manage';
+// The shell re-checks this, so it has to name the same capability as the
+// check above; leaving it on security.manage meant a staff member granted
+// audit.view passed the first gate and was refused by the second.
+$requireCapability = 'audit.view';
 $pageTitle = 'Audit Logs';
 require __DIR__ . '/includes/admin_header.php';
 
@@ -163,44 +169,29 @@ if ($fTo !== '') {
 $sqlWhere = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
 /* ----------------------------------------------------------------- page */
-// Ten at a time. A security log is read a page at a time, and loading
-// hundreds of rows to show ten of them is work nobody asked for.
-$perPage = 10;
-$page = max(1, (int)($_GET['page'] ?? 1));
+/* This screen had the only working pagination in the project; it now goes
+   through the shared helper so it gains the rows-per-page selector and every
+   other table gains what this one already did. The filtered count and the
+   filtered rows still come from the same WHERE and the same bound values.
 
-$countStmt = db()->prepare('SELECT COUNT(*) FROM activity_log' . $sqlWhere);
-$countStmt->execute($params);
-$total = (int)$countStmt->fetchColumn();
-
-// Paging follows the filtered set: asking for page 9 of a two-page result
-// lands on the last page rather than an empty one. The filter form itself
-// carries no page field, so changing a filter always starts at page 1.
-$pages = max(1, (int)ceil($total / $perPage));
-$page = min($page, $pages);
-$offset = ($page - 1) * $perPage;
-
-$stmt = db()->prepare(
-    'SELECT * FROM activity_log' . $sqlWhere
-    . ' ORDER BY created_at DESC, log_id DESC LIMIT :lim OFFSET :off'
+   log_id closes the order: two entries written in the same second would
+   otherwise be free to swap places between pages. */
+$pager = paginate(
+    'SELECT COUNT(*) FROM activity_log' . $sqlWhere,
+    'SELECT * FROM activity_log' . $sqlWhere,
+    $params,
+    'ORDER BY created_at DESC, log_id DESC'
 );
-foreach ($params as $key => $value) {
-    $stmt->bindValue($key, $value);
-}
-$stmt->bindValue('lim', $perPage, PDO::PARAM_INT);
-$stmt->bindValue('off', $offset, PDO::PARAM_INT);
-$stmt->execute();
-$rows = $stmt->fetchAll();
+$rows = $pager['rows'];
+$total = $pager['total'];
+$page = $pager['page'];
+$pages = $pager['pages'];
+$perPage = $pager['perPage'];
+$offset = $pager['offset'];
 
-/** Rebuild the query string while changing one key - used by the pager. */
-$pageUrl = static function (int $n) use ($who, $fModule, $fAction, $fFrom, $fTo): string {
-    $qs = array_filter([
-        'who' => $who, 'module' => $fModule, 'action' => $fAction,
-        'from' => $fFrom, 'to' => $fTo, 'page' => $n > 1 ? (string)$n : '',
-    ], static fn($v) => $v !== '' && $v !== null);
-
-    return BASE_URL . '/admin/audit_logs.php' . ($qs ? '?' . http_build_query($qs) : '');
-};
-
+/* The pager builds its own links now - page_url() in includes/pagination.php
+   carries every active parameter forward, so there is one place that knows how
+   to preserve a filter while changing a page. */
 $anyFilter = $who !== '' || $fModule !== '' || $fAction !== ''
     || $fFrom !== '' || $fTo !== '';
 ?>
@@ -365,26 +356,6 @@ $anyFilter = $who !== '' || $fModule !== '' || $fAction !== ''
     </div>
 </div>
 
-<?php if ($pages > 1): ?>
-    <nav class="d-flex align-items-center justify-content-between" style="margin-top:var(--s-5)"
-         aria-label="Audit log pages">
-        <span class="text-muted" style="font-size:.85rem">
-            Showing <?= $total ? $offset + 1 : 0 ?>&ndash;<?= min($offset + $perPage, $total) ?>
-            of <?= $total ?> &middot; page <?= $page ?> of <?= $pages ?>
-        </span>
-        <div class="d-flex gap-2">
-            <a class="btn btn-secondary btn-sm <?= $page <= 1 ? 'disabled' : '' ?>"
-               href="<?= e($pageUrl(max(1, $page - 1))) ?>"
-               <?= $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : '' ?>>
-                <?= icon('chevron-left', 14) ?> Newer
-            </a>
-            <a class="btn btn-secondary btn-sm <?= $page >= $pages ? 'disabled' : '' ?>"
-               href="<?= e($pageUrl(min($pages, $page + 1))) ?>"
-               <?= $page >= $pages ? 'aria-disabled="true" tabindex="-1"' : '' ?>>
-                Older <?= icon('chevron-right', 14) ?>
-            </a>
-        </div>
-    </nav>
-<?php endif; ?>
+<?php $pagerLabel = 'event'; require __DIR__ . '/../includes/backoffice/pager.php'; ?>
 
 <?php require __DIR__ . '/../includes/backoffice/shell_footer.php'; ?>

@@ -138,10 +138,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$admins = db()->query(
+$pager = paginate(
+    "SELECT COUNT(*) FROM users WHERE role = 'admin'",
     "SELECT user_id, username, email, full_name, avatar_path, contact_number, is_active, created_at
-       FROM users WHERE role = 'admin' ORDER BY created_at ASC"
-)->fetchAll();
+       FROM users WHERE role = 'admin'",
+    [],
+    'ORDER BY created_at ASC, user_id ASC'
+);
+$admins = $pager['rows'];
 
 $activeCount = count(array_filter($admins, static fn($a) => (int)$a['is_active'] === 1));
 
@@ -346,5 +350,8 @@ require __DIR__ . '/includes/admin_header.php';
         </div>
     </aside>
 </div>
+
+<?php $pagerLabel = 'administrator';
+      require __DIR__ . '/../includes/backoffice/pager.php'; ?>
 
 <?php require __DIR__ . '/../includes/backoffice/shell_footer.php'; ?>

@@ -1,5 +1,5 @@
 <?php
-$requireCapability = 'categories.manage';
+$requireCapability = 'categories.view';
 $pageTitle = 'Categories';
 require __DIR__ . '/includes/admin_header.php';
 
@@ -11,11 +11,15 @@ if ($editId) {
     $editing = $stmt->fetch() ?: null;
 }
 
-$categories = db()->query(
-    'SELECT c.*, COUNT(p.product_id) AS product_count
-     FROM categories c LEFT JOIN products p ON p.category_id = c.category_id
-     GROUP BY c.category_id ORDER BY c.name'
-)->fetchAll();
+$catFrom = ' FROM categories c LEFT JOIN products p ON p.category_id = c.category_id';
+$pager = paginate(
+    'SELECT COUNT(*) FROM categories c',
+    'SELECT c.*, COUNT(p.product_id) AS product_count' . $catFrom . ' GROUP BY c.category_id',
+    [],
+    'ORDER BY c.name ASC, c.category_id ASC'
+);
+$categories = $pager['rows'];
+
 ?>
 
 <div class="page-head">
@@ -95,6 +99,9 @@ $categories = db()->query(
                 </tbody>
             </table>
         </div>
+
+        <?php $pagerLabel = 'category'; $pagerPlural = 'categories';
+              require __DIR__ . '/../includes/backoffice/pager.php'; ?>
     </div>
 
     <aside class="summary-card">

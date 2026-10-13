@@ -2083,3 +2083,11 @@ const phLocations = () => {
     });
   }).observe(document.body, { childList: true, subtree: true });
 })();
+
+/* --------------------------------------------- rows-per-page selector */
+/* The form works without this: it is a GET form with a submit button that
+   <noscript> reveals. All this adds is submitting on change, so choosing a
+   size does not need a second click. */
+$$("[data-pager-size]").forEach((select) => {
+  select.addEventListener("change", () => select.form?.submit());
+});

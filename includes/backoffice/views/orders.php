@@ -14,20 +14,26 @@
 $statusFilter = $_GET['status'] ?? '';
 $validStatuses = all_order_statuses();
 
-$sql = 'SELECT o.*, u.username, COALESCE(SUM(oi.quantity), 0) AS unit_count
-        FROM orders o
-        JOIN users u ON u.user_id = o.user_id
-        LEFT JOIN order_items oi ON oi.order_id = o.order_id';
+$from = ' FROM orders o
+          JOIN users u ON u.user_id = o.user_id
+          LEFT JOIN order_items oi ON oi.order_id = o.order_id';
 $params = [];
 if (in_array($statusFilter, $validStatuses, true)) {
-    $sql .= ' WHERE o.status = :status';
+    $from .= ' WHERE o.status = :status';
     $params['status'] = $statusFilter;
 }
-$sql .= ' GROUP BY o.order_id ORDER BY o.created_at DESC';
 
-$stmt = db()->prepare($sql);
-$stmt->execute($params);
-$orders = $stmt->fetchAll();
+/* COUNT(DISTINCT o.order_id), not COUNT(*): the join to order_items multiplies
+   each order by its number of lines, so a plain count would report line items
+   and the pager would promise pages that do not exist. */
+$pager = paginate(
+    'SELECT COUNT(DISTINCT o.order_id)' . $from,
+    'SELECT o.*, u.username, COALESCE(SUM(oi.quantity), 0) AS unit_count'
+        . $from . ' GROUP BY o.order_id',
+    $params,
+    'ORDER BY o.created_at DESC, o.order_id DESC'
+);
+$orders = $pager['rows'];
 
 $statusCounts = array_column(
     db()->query('SELECT status, COUNT(*) AS n FROM orders GROUP BY status')->fetchAll(),
@@ -113,3 +119,5 @@ $allCount = array_sum($statusCounts);
         </table>
     </div>
 </div>
+
+<?php $pagerLabel = 'order'; require __DIR__ . '/../pager.php'; ?>

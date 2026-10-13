@@ -110,10 +110,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$staff = db()->query(
+$pager = paginate(
+    "SELECT COUNT(*) FROM users WHERE role = 'staff'",
     "SELECT user_id, username, email, full_name, avatar_path, contact_number, is_active, created_at
-       FROM users WHERE role = 'staff' ORDER BY created_at DESC"
-)->fetchAll();
+       FROM users WHERE role = 'staff'",
+    [],
+    'ORDER BY created_at DESC, user_id DESC'
+);
+$staff = $pager['rows'];
 
 // Shown on the page so the permissions are documented where they are granted.
 $allowed = [
@@ -330,5 +334,8 @@ require __DIR__ . '/includes/admin_header.php';
         </div>
     </aside>
 </div>
+
+<?php $pagerLabel = 'staff account'; $pagerPlural = 'staff accounts';
+      require __DIR__ . '/../includes/backoffice/pager.php'; ?>
 
 <?php require __DIR__ . '/../includes/backoffice/shell_footer.php'; ?>

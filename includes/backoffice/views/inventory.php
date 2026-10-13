@@ -23,15 +23,22 @@ if ($filter === 'out') {
     $where = 'WHERE p.stock_quantity > p.low_stock_threshold';
 }
 
-$products = db()->query(
-    "SELECT p.*, c.name AS category_name
-       FROM products p
-       JOIN categories c ON c.category_id = p.category_id
-       $where
-      ORDER BY (p.stock_quantity = 0) DESC,
-               (p.stock_quantity <= p.low_stock_threshold) DESC,
-               p.stock_quantity ASC, p.name ASC"
-)->fetchAll();
+$from = " FROM products p
+           JOIN categories c ON c.category_id = p.category_id
+           $where";
+
+/* Out of stock first, then low, then by how little is left. product_id closes
+   the order so two products at the same level cannot trade places between
+   pages. */
+$pager = paginate(
+    'SELECT COUNT(*)' . $from,
+    'SELECT p.*, c.name AS category_name' . $from,
+    [],
+    'ORDER BY (p.stock_quantity = 0) DESC,
+              (p.stock_quantity <= p.low_stock_threshold) DESC,
+              p.stock_quantity ASC, p.name ASC, p.product_id ASC'
+);
+$products = $pager['rows'];
 
 // Counts for the filter chips, always over the whole catalog.
 $tally = db()->query(
@@ -160,3 +167,5 @@ $chips = [
         </table>
     </div>
 </div>
+
+<?php $pagerLabel = 'product'; require __DIR__ . '/../pager.php'; ?>

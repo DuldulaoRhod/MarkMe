@@ -25,19 +25,28 @@ if ($categoryFilter > 0) {
     $params['cat'] = $categoryFilter;
 }
 
-$sql = 'SELECT p.*, c.name AS category_name FROM products p
-        JOIN categories c ON c.category_id = p.category_id';
+$from = ' FROM products p JOIN categories c ON c.category_id = p.category_id';
 if ($where) {
-    $sql .= ' WHERE ' . implode(' AND ', $where);
+    $from .= ' WHERE ' . implode(' AND ', $where);
 }
-// Within one category, alphabetical reads better than newest-first.
-$sql .= $categoryFilter > 0
-    ? ' ORDER BY p.name ASC'
-    : ' ORDER BY p.created_at DESC';
 
-$stmt = db()->prepare($sql);
-$stmt->execute($params);
-$products = $stmt->fetchAll();
+/* Within one category, alphabetical reads better than newest-first. The
+   primary key is appended either way so the order is total: two products added
+   in the same second, or sharing a name, would otherwise be free to swap
+   places between pages and appear twice or not at all. */
+$order = $categoryFilter > 0
+    ? 'ORDER BY p.name ASC, p.product_id ASC'
+    : 'ORDER BY p.created_at DESC, p.product_id DESC';
+
+// Count and rows share the same FROM and the same bound values, so the total
+// always describes the set the rows came from.
+$pager = paginate(
+    'SELECT COUNT(*)' . $from,
+    'SELECT p.*, c.name AS category_name' . $from,
+    $params,
+    $order
+);
+$products = $pager['rows'];
 
 /**
  * Counts for the pills. They respect the current search but not the current
@@ -214,3 +223,5 @@ $headNote = $categoryFilter > 0 ? 'in this category' : 'in the catalog';
         </table>
     </div>
 </div>
+
+<?php $pagerLabel = 'product'; require __DIR__ . '/../pager.php'; ?>
