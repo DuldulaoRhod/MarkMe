@@ -41,10 +41,10 @@ $groups = [
     ],
     'Catalog' => [
         ['products.php', 'package', 'Products', null, 'products.view'],
-        ['categories.php', 'tag', 'Categories', null, 'categories.manage'],
+        ['categories.php', 'tag', 'Categories', null, 'categories.view'],
         ['shapes.php', 'shapes', 'Shapes', null, 'options.manage'],
         ['designs.php', 'palette', 'Designs', null, 'options.manage'],
-        ['option_review.php', 'check-circle', 'Review Uploads', $pendingOptions ?: null, 'options.manage'],
+        ['option_review.php', 'check-circle', 'Review Uploads', $pendingOptions ?: null, 'options.view'],
         ['inventory.php', 'layers', 'Inventory', $lowStockCount ?: null, 'inventory.view'],
     ],
     'Sales' => [
@@ -54,11 +54,12 @@ $groups = [
     'People' => [
         ['customers.php', 'users', 'Customers', null, 'customers.view'],
         ['staff.php', 'shield', 'Staff', null, 'staff.manage'],
+        ['staff_permissions.php', 'lock', 'Staff Permissions', null, 'permissions.manage'],
         ['admins.php', 'key', 'Admins', null, 'admins.manage'],
     ],
     'Security' => [
         ['security.php', 'shield', 'Security', $lockedCount ?: null, 'security.manage'],
-        ['audit_logs.php', 'list', 'Audit Logs', null, 'security.manage'],
+        ['audit_logs.php', 'list', 'Audit Logs', null, 'audit.view'],
     ],
     /* Settings and Profile are not here: they are about the person signed in
        rather than the shop, so they live under their own name in the top bar
@@ -91,6 +92,7 @@ foreach ($groups as $label => $links) {
                 // keep their parent highlighted.
                 $owners = [
                     'customers.php' => ['customer_view.php'],
+                    'staff_permissions.php' => ['staff_permissions_edit.php'],
                     'products.php' => ['product_form.php', 'product_restock.php'],
                     'orders.php' => ['order_view.php'],
                 ];

@@ -1,6 +1,8 @@
 <?php
 $productId = isset($_GET['id']) ? (int)$_GET['id'] : null;
-$requireCapability = 'products.manage';
+// The create screen and the edit screen are separate permissions; the id in
+// the query string is what tells them apart.
+$requireCapability = !empty($_GET['id']) ? 'products.edit' : 'products.create';
 $pageTitle = $productId ? 'Edit Product' : 'Add Product';
 require __DIR__ . '/includes/admin_header.php';
 

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_can('categories.manage');
+require_can('categories.delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('/admin/categories.php');

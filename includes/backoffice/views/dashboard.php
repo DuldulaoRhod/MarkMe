@@ -96,7 +96,14 @@ $statusTotal = max(1, array_sum($statusCounts));
             <span class="stat-icon" aria-hidden="true"><?= icon('receipt', 18) ?></span>
         </div>
         <span class="stat-value mono-num"><?= $counts['orders'] ?></span>
-        <span class="stat-note"><a href="<?= panel_url('orders.php') ?>">Manage orders</a></span>
+        <?php /* A link nobody can follow is worse than no link: it offers a
+                 door and then refuses it. Each footnote is a link only when the
+                 reader holds the capability behind it. */ ?>
+        <span class="stat-note">
+            <?php if (can('orders.view')): ?>
+                <a href="<?= panel_url('orders.php') ?>">Manage orders</a>
+            <?php else: ?>Placed by customers<?php endif; ?>
+        </span>
     </div>
 
     <div class="stat-card">
@@ -105,7 +112,11 @@ $statusTotal = max(1, array_sum($statusCounts));
             <span class="stat-icon" aria-hidden="true"><?= icon('users', 18) ?></span>
         </div>
         <span class="stat-value mono-num"><?= $counts['customers'] ?></span>
-        <span class="stat-note"><a href="<?= panel_url('customers.php') ?>">View customers</a></span>
+        <span class="stat-note">
+            <?php if (can('customers.view')): ?>
+                <a href="<?= panel_url('customers.php') ?>">View customers</a>
+            <?php else: ?>Registered accounts<?php endif; ?>
+        </span>
     </div>
 
     <div class="stat-card">
@@ -115,7 +126,11 @@ $statusTotal = max(1, array_sum($statusCounts));
         </div>
         <span class="stat-value mono-num"><?= $counts['products'] ?></span>
         <span class="stat-note">
-            <a href="<?= panel_url('products.php') ?>"><?= can('products.manage') ? 'Manage catalog' : 'View catalog' ?></a>
+            <?php if (can('products.view')): ?>
+                <a href="<?= panel_url('products.php') ?>">
+                    <?= can('products.edit') || can('products.create') ? 'Manage catalog' : 'View catalog' ?>
+                </a>
+            <?php else: ?>In the catalog<?php endif; ?>
         </span>
     </div>
 
@@ -126,8 +141,10 @@ $statusTotal = max(1, array_sum($statusCounts));
         </div>
         <span class="stat-value mono-num"><?= $counts['categories'] ?></span>
         <span class="stat-note">
-            <?php if (can('categories.manage')): ?>
-                <a href="<?= BASE_URL ?>/admin/categories.php">Manage categories</a>
+            <?php if (can('categories.view')): ?>
+                <a href="<?= panel_url('categories.php') ?>">
+                    <?= can('categories.edit') || can('categories.create') ? 'Manage categories' : 'View categories' ?>
+                </a>
             <?php else: ?>In the catalog<?php endif; ?>
         </span>
     </div>
@@ -142,7 +159,9 @@ $statusTotal = max(1, array_sum($statusCounts));
         </div>
         <span class="stat-value mono-num"><?= (int)$attention['pending'] ?></span>
         <span class="stat-note">
-            <a href="<?= panel_url('orders.php') ?>?status=Pending">Start processing</a>
+            <?php if (can('orders.view')): ?>
+                <a href="<?= panel_url('orders.php') ?>?status=Pending">Start processing</a>
+            <?php else: ?>Waiting to be processed<?php endif; ?>
         </span>
     </div>
 
@@ -153,8 +172,9 @@ $statusTotal = max(1, array_sum($statusCounts));
         </div>
         <span class="stat-value mono-num"><?= $lowStockTotal ?></span>
         <span class="stat-note">
-            <?php if ($lowStockTotal): ?>
+            <?php if ($lowStockTotal && can('inventory.view')): ?>
                 <a href="<?= panel_url('inventory.php') ?>?state=low">Restock now</a>
+            <?php elseif ($lowStockTotal): ?>Running low
             <?php else: ?>All well stocked<?php endif; ?>
         </span>
     </div>
@@ -176,7 +196,7 @@ $statusTotal = max(1, array_sum($statusCounts));
         <span class="stat-value mono-num"><?= format_price($salesTotal) ?></span>
         <span class="stat-note">
             <?php if (can('reports.view')): ?>
-                <a href="<?= BASE_URL ?>/admin/reports.php">See reports</a>
+                <a href="<?= panel_url('reports.php') ?>">See reports</a>
             <?php else: ?>Excluding cancelled<?php endif; ?>
         </span>
     </div>

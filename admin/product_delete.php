@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-require_can('products.manage');
+require_can('products.delete');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('/admin/products.php');

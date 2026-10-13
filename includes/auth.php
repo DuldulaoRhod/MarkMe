@@ -1,5 +1,11 @@
 <?php
 require_once __DIR__ . '/functions.php';
+// Loaded here so every page that authenticates also has the per-account
+// permission resolution available to can(); without it can() silently falls
+// back to role defaults and a staff member keeps access an administrator
+// thought they had removed.
+require_once __DIR__ . '/permissions.php';
+require_once __DIR__ . '/pagination.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/icons.php';
 
@@ -293,7 +299,16 @@ function attempt_login(string $identifier, string $password): array
     clear_failed_attempts($userId);
 
     // ---- MFA ------------------------------------------------------------
-    if ((int)$user['mfa_enabled'] === 1 && !empty($user['mfa_secret'])) {
+    /* A second factor is required when the account has one enrolled. Which
+       kind decides what the challenge asks for, not whether there is one: the
+       condition used to require a TOTP secret, so an account using emailed
+       codes - which has no secret - would have walked straight past this gate
+       into a full session. */
+    $mfaMethod = $user['mfa_method'] ?? 'totp';
+    $hasFactor = (int)$user['mfa_enabled'] === 1
+        && ($mfaMethod === 'email' || !empty($user['mfa_secret']));
+
+    if ($hasFactor) {
         // A half-open session: enough to finish the TOTP step and nothing
         // else. $_SESSION['user'] is deliberately NOT set, so every
         // require_login()/require_can() in the app still treats this as a
@@ -338,7 +353,7 @@ function establish_session(array $user): array
     $_SESSION['user'] = $user;
     $_SESSION['started_at'] = time();
     $_SESSION['last_activity'] = time();
-    unset($_SESSION['mfa_pending']);
+    unset($_SESSION['mfa_pending'], $_SESSION['mfa_code_sent']);
 
     // A successful sign-in answers any earlier expiry, so nothing about the
     // previous session should outlive it. Belt and braces alongside the
@@ -373,7 +388,7 @@ function mfa_pending(): ?array
 
     // A challenge left open forever would be a second, weaker way in.
     if (time() - (int)$pending['started'] > 300) {
-        unset($_SESSION['mfa_pending']);
+        unset($_SESSION['mfa_pending'], $_SESSION['mfa_code_sent']);
         return null;
     }
 

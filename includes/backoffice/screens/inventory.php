@@ -24,7 +24,7 @@ require_manager();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Viewing stock is a staff job; deciding what counts as "low" is a
     // configuration change, so it stays with the administrator.
-    require_can('inventory.manage');
+    require_can('inventory.adjust');
     csrf_check();
     $productId = (int)($_POST['product_id'] ?? 0);
     $threshold = max(0, min(10000, (int)($_POST['low_stock_threshold'] ?? 5)));

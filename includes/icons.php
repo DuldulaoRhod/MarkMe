@@ -84,6 +84,7 @@ function icon(string $name, int $size = 20, string $class = '', ?string $label =
         'refresh'     => '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/>',
         'filter'      => '<path d="M22 3H2l8 9.5V20l4 2v-9.5L22 3z"/>',
         'save'        => '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
+        'lock'        => '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
         'key'         => '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2"/><path d="M17 6l3 3"/><path d="M14 9l3 3"/>',
         'store'       => '<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M4.5 11.5V20a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-8.5"/><path d="M9.5 21v-6h5v6"/>',
         'layers'      => '<path d="M12 2.7L2.5 7.5 12 12.3l9.5-4.8L12 2.7z"/><path d="M2.5 16.5L12 21.3l9.5-4.8"/><path d="M2.5 12L12 16.8l9.5-4.8"/>',

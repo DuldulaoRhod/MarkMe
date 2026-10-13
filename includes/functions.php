@@ -237,7 +237,14 @@ function can(string $capability): bool
         return false;
     }
 
-    $caps = role_capabilities($_SESSION['user']['role']);
+    /* Still the one gate every screen and endpoint passes through; what
+       changed is where the answer comes from. A staff account an administrator
+       has configured is answered from its own grants, and everyone else from
+       the role defaults - see effective_capabilities(). The identity is taken
+       from the session, never from the request. */
+    $caps = function_exists('effective_capabilities')
+        ? effective_capabilities($_SESSION['user'])
+        : role_capabilities($_SESSION['user']['role']);
 
     return in_array('*', $caps, true) || in_array($capability, $caps, true);
 }
@@ -258,7 +265,31 @@ function panel_base(): string
 /** A URL inside the signed-in user's own panel. */
 function panel_url(string $page = ''): string
 {
-    return BASE_URL . panel_base() . ($page !== '' ? '/' . ltrim($page, '/') : '');
+    $page = ltrim($page, '/');
+    if ($page === '') {
+        return BASE_URL . panel_base();
+    }
+
+    /* Point at the page that actually exists.
+    
+       The staff panel only wraps the screens it has always had. Screens that
+       were administrator-only - Reports, the Audit Trail, Categories, the
+       review queue - have no /staff copy, so prefixing /staff blindly produced
+       links to files that are not there. That became visible the moment those
+       screens turned into permissions a staff member could be granted: the
+       sidebar offered Reports and the link 404'd.
+
+       Falling back to /admin is not a hole. admin_header.php sends a staff
+       member to the /staff version when one exists, and otherwise lets the
+       request through to the same require_can() every other route uses, so the
+       capability still decides. The link now goes where the enforcement
+       already was. */
+    $base = panel_base();
+    if ($base !== '/admin' && !is_file(__DIR__ . '/..' . $base . '/' . $page)) {
+        $base = '/admin';
+    }
+
+    return BASE_URL . $base . '/' . $page;
 }
 
 function role_label(?string $role = null): string

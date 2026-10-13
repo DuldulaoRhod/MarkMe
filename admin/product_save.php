@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/upload.php';
-require_can('products.manage');
+/* Creating and editing are separate grants, so a staff member can be
+   trusted to correct a price without being able to add products. The form
+   posts a product_id only when editing, which is what distinguishes them. */
+require_can(!empty($_POST['product_id']) ? 'products.edit' : 'products.create');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('/admin/products.php');

@@ -60,7 +60,7 @@ $pageTitle = 'Admin Login';
 
     <h1 style="font-size:1.4rem;margin-bottom:var(--s-2)">Sign in</h1>
     <p class="text-muted" style="font-size:.92rem;margin-bottom:var(--s-6)">
-        Administrator and staff access. Customers sign in from the storefront.
+        Administrator and staff access. Customers sign i    n from the storefront.
     </p>
 
     <?php if ($error): ?>
