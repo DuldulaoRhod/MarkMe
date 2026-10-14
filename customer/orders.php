@@ -93,6 +93,22 @@ if ($orders) {
     }
 }
 
+/* Payment state for the same set of orders, in one query rather than one per
+   card. Ordered ascending so the newest attempt is what each key ends up
+   holding - the same row payment_for_order() would return. */
+$payments = [];
+if ($orders) {
+    $ids = array_column($orders, 'order_id');
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $s = db()->prepare(
+        "SELECT order_id, status FROM payments WHERE order_id IN ($in) ORDER BY payment_id"
+    );
+    $s->execute($ids);
+    foreach ($s->fetchAll() as $row) {
+        $payments[(int)$row['order_id']] = $row;
+    }
+}
+
 $pageTitle = 'My Orders';
 require __DIR__ . '/../includes/customer/header.php';
 ?>
@@ -140,6 +156,8 @@ require __DIR__ . '/../includes/customer/header.php';
                     $shown = customer_status($order['status']);
                     $units = (int)$order['unit_count'];
                     $extraLines = max(0, (int)$order['line_count'] - 1);
+                    $owes = payment_is_outstanding($order, $payments[$oid] ?? null);
+                    $canPay = payment_can_pay_now($order, $payments[$oid] ?? null);
                     ?>
                     <article class="order-card">
                         <header class="order-card-head">
@@ -149,7 +167,12 @@ require __DIR__ . '/../includes/customer/header.php';
                                     <?= e(date('F j, Y', strtotime($order['created_at']))) ?>
                                 </span>
                             </div>
-                            <span class="badge bg-<?= status_variant($shown) ?>"><?= e(strtoupper($shown)) ?></span>
+                            <span class="d-flex align-items-center gap-2">
+                                <?php if ($owes): ?>
+                                    <span class="badge bg-warning">AWAITING PAYMENT</span>
+                                <?php endif; ?>
+                                <span class="badge bg-<?= status_variant($shown) ?>"><?= e(strtoupper($shown)) ?></span>
+                            </span>
                         </header>
 
                         <div class="order-card-body">
@@ -182,6 +205,15 @@ require __DIR__ . '/../includes/customer/header.php';
                         </div>
 
                         <footer class="order-card-foot">
+                            <?php if ($canPay): ?>
+                                <form method="post" action="<?= BASE_URL ?>/customer/pay_order.php">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="order_id" value="<?= $oid ?>">
+                                    <button type="submit" class="btn btn-primary btn-sm">
+                                        <?= icon('wallet', 14) ?> Pay now
+                                    </button>
+                                </form>
+                            <?php endif; ?>
                             <a href="<?= BASE_URL ?>/customer/order_detail.php?id=<?= $oid ?>"
                                class="btn btn-secondary btn-sm">
                                 View Order <?= icon('chevron-right', 14) ?>

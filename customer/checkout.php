@@ -36,11 +36,23 @@ foreach ($items as $item) {
     $unitCount += (int)$item['quantity'];
 }
 
-// Only the two methods the orders.payment_method enum accepts.
+// Only methods the orders.payment_method enum accepts.
 $paymentMethods = [
     'Cash on Delivery' => ['wallet', 'Pay the courier in cash when your order arrives at your door.'],
     'Bank Transfer' => ['bank', 'We send our bank details after you order. Send proof of payment and we start crafting.'],
 ];
+
+/* Offered only when PayMongo is configured. Without keys the option would send
+   the customer to a page that cannot be created, so it is simply absent - and
+   place_order.php refuses the value for the same reason, so a posted
+   'PayMongo' cannot select a method the shop cannot take. */
+if (paymongo_configured()) {
+    $paymentMethods['PayMongo'] = [
+        'card',
+        'Pay now by card, GCash, Maya or GrabPay. You are taken to a secure page and '
+        . 'brought back when it is done. No card details are stored by MarkMe.',
+    ];
+}
 
 $pageTitle = 'Checkout';
 require __DIR__ . '/../includes/customer/header.php';

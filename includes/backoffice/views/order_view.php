@@ -252,9 +252,42 @@ $currentIndex = array_search($order['status'], $flow, true);
                     <div>
                         <p class="eyebrow eyebrow-muted">Payment</p>
                         <p style="margin-top:var(--s-2)" class="d-flex align-items-center gap-2">
-                            <?= icon($order['payment_method'] === 'Bank Transfer' ? 'bank' : 'wallet', 18) ?>
+                            <?= icon(match ($order['payment_method']) {
+                                'Bank Transfer' => 'bank',
+                                'PayMongo' => 'card',
+                                default => 'wallet',
+                            }, 18) ?>
                             <strong><?= e($order['payment_method']) ?></strong>
                         </p>
+                        <?php /* Shown for card orders only, and read-only: there is no
+                                 button here that marks an order paid. Only a verified
+                                 provider response moves that, so a mistaken click cannot
+                                 claim money arrived. */ ?>
+                        <?php $orderPayment = payment_for_order((int)$order['order_id']); ?>
+                        <?php if ($orderPayment): ?>
+                            <p style="margin-top:var(--s-2);font-size:.85rem">
+                                <span class="badge badge-status s-<?=
+                                    $orderPayment['status'] === 'paid' ? 'approved'
+                                    : ($orderPayment['status'] === 'pending' ? 'pending' : 'rejected') ?>">
+                                    <?= e(payment_status_label($orderPayment['status'])) ?>
+                                </span>
+                            </p>
+                            <dl class="payment-facts">
+                                <div><dt>Reference</dt>
+                                    <dd class="mono-num"><?= e($orderPayment['provider_reference']) ?></dd></div>
+                                <div><dt>Amount</dt>
+                                    <dd><?= e(format_price((int)$orderPayment['amount_centavos'] / 100)) ?>
+                                        <?= e($orderPayment['currency']) ?></dd></div>
+                                <?php if ($orderPayment['provider_payment_id']): ?>
+                                    <div><dt>Payment id</dt>
+                                        <dd class="mono-num"><?= e($orderPayment['provider_payment_id']) ?></dd></div>
+                                <?php endif; ?>
+                                <div><dt>Verified</dt>
+                                    <dd><?= $orderPayment['verified_at']
+                                        ? e(date('M j, Y g:i A', strtotime((string)$orderPayment['verified_at'])))
+                                        : 'not yet confirmed' ?></dd></div>
+                            </dl>
+                        <?php endif; ?>
                     </div>
                     <div class="span-2">
                         <p class="eyebrow eyebrow-muted">Ship to</p>

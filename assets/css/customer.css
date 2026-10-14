@@ -3322,6 +3322,8 @@ body.no-scroll {
 .order-card-foot {
   display: flex;
   justify-content: flex-end;
+  /* Two controls when an order still needs paying: Pay now beside View Order. */
+  gap: var(--s-3);
   padding: 0 var(--s-5) var(--s-5);
 }
 
@@ -3335,6 +3337,10 @@ body.no-scroll {
   }
   .order-card-foot {
     justify-content: stretch;
+    flex-direction: column;
+  }
+  .order-card-foot form {
+    width: 100%;
   }
   .order-card-foot .btn {
     width: 100%;

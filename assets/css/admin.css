@@ -1186,3 +1186,22 @@
     transition: none;
   }
 }
+
+/* Payment details on an order. Read-only by design: nothing here marks an
+   order paid, because only a verified provider response may do that. */
+.payment-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem var(--s-3);
+  margin: var(--s-3) 0 0;
+  font-size: 0.8rem;
+}
+.payment-facts dt {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.payment-facts dd {
+  margin: 0;
+  color: var(--ink);
+  word-break: break-all;
+}

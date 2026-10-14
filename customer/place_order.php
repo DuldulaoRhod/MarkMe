@@ -11,7 +11,13 @@ $user = current_user();
 $fullName = trim($_POST['full_name'] ?? '');
 $contactNumber = trim($_POST['contact_number'] ?? '');
 $deliveryAddress = trim($_POST['delivery_address'] ?? '');
-$paymentMethod = in_array($_POST['payment_method'] ?? '', ['Cash on Delivery', 'Bank Transfer'], true)
+/* PayMongo is offered only when it is configured, so a posted value cannot
+   select a method the shop cannot actually take. */
+$allowedMethods = ['Cash on Delivery', 'Bank Transfer'];
+if (paymongo_configured()) {
+    $allowedMethods[] = 'PayMongo';
+}
+$paymentMethod = in_array($_POST['payment_method'] ?? '', $allowedMethods, true)
     ? $_POST['payment_method']
     : 'Cash on Delivery';
 
@@ -117,6 +123,41 @@ try {
         'order',
         $orderId
     );
+
+    /* A card order is not finished yet: it has been recorded as Pending and
+       now needs paying. The amount sent to PayMongo is $total, computed above
+       from the products table - the browser never supplied a figure, and this
+       is the same number the provider's answer is checked against later. */
+    if ($paymentMethod === 'PayMongo') {
+        $session = payment_start_checkout(
+            ['order_id' => $orderId, 'total_amount' => $total],
+            array_filter([
+                'name' => $fullName,
+                'phone' => $contactNumber,
+                'email' => $user['email'] ?? null,
+            ])
+        );
+
+        if (!$session['ok']) {
+            /* The order exists and is unpaid. Saying so is better than hiding
+               it: the basket has already been emptied and the stock reserved,
+               so pretending nothing happened would lose the order. */
+            flash_set('error', $session['error'] . ' Your order was saved and is waiting for payment.');
+            redirect('/customer/order_confirmation.php?order_id=' . $orderId);
+        }
+
+        log_activity(
+            'payment.started',
+            'Checkout session opened for order #' . $orderId,
+            'order',
+            $orderId
+        );
+
+        // Off to PayMongo's hosted page. No card detail is collected here, or
+        // anywhere in MarkMe.
+        header('Location: ' . $session['url']);
+        exit;
+    }
 
     redirect('/customer/order_confirmation.php?order_id=' . $orderId);
 } catch (RuntimeException $e) {

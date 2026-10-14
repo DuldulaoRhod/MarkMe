@@ -44,6 +44,10 @@ foreach ($items as $item) {
     $unitCount += (int)$item['quantity'];
 }
 
+$payment = payment_for_order($orderId);
+$owes = payment_is_outstanding($order, $payment);
+$canPay = payment_can_pay_now($order, $payment);
+
 $pageTitle = 'Order confirmed';
 require __DIR__ . '/../includes/customer/header.php';
 ?>
@@ -51,9 +55,15 @@ require __DIR__ . '/../includes/customer/header.php';
 <div class="confirm-wrap">
     <span class="confirm-check" aria-hidden="true"><?= icon('check', 38) ?></span>
 
-    <h1>Thank you for your order!</h1>
-    <p>We&rsquo;ve received it and started getting your bookmark<?= '' ?> ready. You&rsquo;ll see each status
-        change on the order page.</p>
+    <?php if ($owes): ?>
+        <h1>Your order is saved</h1>
+        <p>It is waiting to be paid. We&rsquo;ll start on your bookmark as soon as the
+            payment comes through.</p>
+    <?php else: ?>
+        <h1>Thank you for your order!</h1>
+        <p>We&rsquo;ve received it and started getting your bookmark ready. You&rsquo;ll see each status
+            change on the order page.</p>
+    <?php endif; ?>
 
     <dl class="confirm-facts">
         <div>
@@ -111,6 +121,25 @@ require __DIR__ . '/../includes/customer/header.php';
             <span>Delivering to</span>
             <span class="val" style="text-align:right;max-width:28ch"><?= e($order['delivery_address']) ?></span>
         </div>
+        <?php if ($order['payment_method'] === 'PayMongo'): ?>
+            <div class="summary-row" style="margin-top:var(--s-3)">
+                <span>Payment status</span>
+                <span class="val">
+                    <span class="badge bg-<?= payment_status_variant($payment['status'] ?? null) ?>">
+                        <?= e(payment_status_label($payment['status'] ?? null)) ?>
+                    </span>
+                </span>
+            </div>
+        <?php endif; ?>
+        <?php if ($canPay): ?>
+            <form method="post" action="<?= BASE_URL ?>/customer/pay_order.php" style="margin-top:var(--s-4)">
+                <?= csrf_field() ?>
+                <input type="hidden" name="order_id" value="<?= (int)$order['order_id'] ?>">
+                <button type="submit" class="btn btn-primary btn-block">
+                    <?= icon('wallet', 16) ?> Pay now
+                </button>
+            </form>
+        <?php endif; ?>
         <?php if ($order['payment_method'] === 'Bank Transfer'): ?>
             <p class="summary-note" style="margin-top:var(--s-4)">
                 <?= icon('bank', 15) ?>

@@ -33,6 +33,28 @@ define('AV_SCANNER', '');
 define('AV_REQUIRED', false);
 define('AV_TIMEOUT_SECONDS', 20);
 
+// ---------------------------------------------------------------------
+// PayMongo (https://docs.paymongo.com)
+//
+// The secret key is exactly that: it authenticates every charge, so it lives
+// here in config.php, which is gitignored, and never reaches the browser.
+// Keys beginning sk_test_ put the integration in test mode automatically -
+// nothing else has to be switched - so live payments cannot happen by
+// accident.
+//
+// Where to get them:
+//   1. Create a free account at https://dashboard.paymongo.com
+//   2. Developers -> API keys, and copy the TEST keys (pk_test_... / sk_test_...)
+//   3. Developers -> Webhooks, add an endpoint pointing at
+//      <your BASE_URL>/customer/paymongo_webhook.php, subscribe to
+//      checkout_session.payment.paid, and copy the signing secret it returns.
+//
+// Leave these blank and MarkMe keeps offering Cash on Delivery and Bank
+// Transfer only - the card option simply does not appear.
+define('PAYMONGO_PUBLIC_KEY', '');
+define('PAYMONGO_SECRET_KEY', '');
+define('PAYMONGO_WEBHOOK_SECRET', '');
+
 // Personalized bookmark text. Enforced server-side in add_to_cart.php and
 // design_save.php; the studio's maxlength mirrors it for a good experience.
 define('CUSTOM_TEXT_MAX', 20);

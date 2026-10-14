@@ -6,6 +6,7 @@ require_once __DIR__ . '/functions.php';
 // thought they had removed.
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/pagination.php';
+require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/icons.php';
 

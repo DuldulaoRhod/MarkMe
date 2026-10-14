@@ -31,6 +31,12 @@ $items = $itemStmt->fetchAll();
 
 $cancelled = $order['status'] === 'Cancelled';
 
+// Card orders carry a payment row; the other methods are settled off-site and
+// have none.
+$payment = payment_for_order($orderId);
+$owes = payment_is_outstanding($order, $payment);
+$canPay = payment_can_pay_now($order, $payment);
+
 // The timeline speaks the same three-word vocabulary as the status badge, so
 // the two can never disagree. The internal "Processing" step is still
 // reported honestly, as the note under the Pending stage.
@@ -132,7 +138,33 @@ require __DIR__ . '/../includes/customer/header.php';
                                     <?= icon($order['payment_method'] === 'Bank Transfer' ? 'bank' : 'wallet', 18) ?>
                                     <strong><?= e($order['payment_method']) ?></strong>
                                 </p>
-                                <p class="text-muted" style="font-size:.85rem">Nothing was charged online.</p>
+                                <?php if ($order['payment_method'] === 'PayMongo'): ?>
+                                    <p style="margin-top:var(--s-2)">
+                                        <span class="badge bg-<?= payment_status_variant($payment['status'] ?? null) ?>">
+                                            <?= e(payment_status_label($payment['status'] ?? null)) ?>
+                                        </span>
+                                    </p>
+                                    <?php if ($payment && $payment['status'] === 'paid'): ?>
+                                        <p class="text-muted" style="font-size:.85rem">
+                                            Confirmed <?= e(date('M j, Y 	 g:i A', strtotime($payment['verified_at'] ?? $payment['created_at']))) ?>.
+                                        </p>
+                                    <?php elseif ($owes): ?>
+                                        <p class="text-muted" style="font-size:.85rem">
+                                            This order is saved and waiting to be paid.
+                                        </p>
+                                        <?php if ($canPay): ?>
+                                        <form method="post" action="<?= BASE_URL ?>/customer/pay_order.php" style="margin-top:var(--s-3)">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="order_id" value="<?= (int)$order['order_id'] ?>">
+                                            <button type="submit" class="btn btn-primary">
+                                                <?= icon('wallet', 16) ?> Pay now
+                                            </button>
+                                        </form>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <p class="text-muted" style="font-size:.85rem">Nothing was charged online.</p>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
