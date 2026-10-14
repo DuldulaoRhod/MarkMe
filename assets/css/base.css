@@ -271,3 +271,88 @@ img {
   margin: var(--s-6) 0;
   opacity: 1;
 }
+
+/* ===================== Page transitions ==============================
+   Navigating between two server-rendered pages used to be a white flash:
+   the old document is thrown away before the new one paints. The View
+   Transitions API lets the browser hold the old frame and cross-fade it
+   into the new one, so moving between screens reads as the same page
+   changing rather than the window blinking.
+
+   navigation: auto applies it to same-origin navigations only, which is
+   every link inside MarkMe. Browsers without support ignore the at-rule
+   entirely and navigate exactly as they did before - nothing to detect
+   and nothing to polyfill.
+   ==================================================================== */
+@view-transition {
+  navigation: auto;
+}
+
+/* Only the duration is set here, never the animation itself.
+   
+   The browser pairs the two root snapshots with mix-blend-mode:
+   plus-lighter and gives them keyframes whose opacities always sum to 1,
+   so the cross-fade never dips. Replacing those keyframes breaks that
+   guarantee: a 120ms fade-out against a 220ms fade-in leaves 100ms where
+   neither snapshot is solid, the page backdrop shows through, and every
+   click reads as a blink. Adding a transform makes it worse still -
+   offsetting one additively-blended layer against the other ghosts the
+   text. Overriding the duration alone keeps the browser's own pairing
+   intact. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+/* The rail and the top bar are identical on every back-office screen.
+   Naming them lifts them out of the root snapshot, so the browser treats
+   each as the same element across the navigation and leaves it alone
+   instead of fading the nav out and back in on every click. */
+.admin-side {
+  view-transition-name: admin-rail;
+}
+.admin-top {
+  view-transition-name: admin-topbar;
+}
+::view-transition-group(admin-rail),
+::view-transition-group(admin-topbar) {
+  animation: none;
+}
+/* And the snapshots inside each: the active nav link is the one thing that
+   does change between screens, and it should move the instant the page
+   does rather than dissolve from the old one. mix-blend-mode is returned
+   to normal so the new snapshot simply covers the old. */
+::view-transition-old(admin-rail),
+::view-transition-new(admin-rail),
+::view-transition-old(admin-topbar),
+::view-transition-new(admin-topbar) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Where view transitions are unavailable, the arriving content fades in
+   on its own. Opacity only, for the same reason as above. */
+@supports not (view-transition-name: none) {
+  .admin-content {
+    animation: vt-fade-in 180ms var(--ease-entrance) both;
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Asked not to animate: don't. Switching the navigation off is enough -
+   the pages still change, they simply cut rather than fade. */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+  .admin-content {
+    animation: none;
+  }
+}
