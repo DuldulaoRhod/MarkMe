@@ -97,7 +97,11 @@ $headNote = $categoryFilter > 0 ? 'in this category' : 'in the catalog';
                 matching &ldquo;<?= e($search) ?>&rdquo;<?php endif; ?>
         </p>
     </div>
-    <?php if (can('products.manage')): ?>
+    <?php /* products.create, not products.manage: "manage" is reserved and
+             ungrantable, so gating on it hid this button from every staff
+             member an administrator had granted "Add new products" to. The
+             endpoint behind it checks products.create. */ ?>
+    <?php if (can('products.create')): ?>
         <div class="d-flex flex-wrap gap-2">
             <a href="<?= BASE_URL ?>/admin/product_form.php" class="btn btn-primary">
                 <?= icon('plus', 16) ?> Add product
@@ -181,13 +185,13 @@ $headNote = $categoryFilter > 0 ? 'in this category' : 'in the catalog';
                                    aria-label="View <?= e($product['name']) ?> on the storefront">
                                     <?= icon('eye', 14) ?> View
                                 </a>
-                                <?php if (can('products.manage')): ?>
+                                <?php if (can('products.edit')): ?>
                                     <a href="<?= BASE_URL ?>/admin/product_form.php?id=<?= (int)$product['product_id'] ?>"
                                        class="btn btn-secondary btn-sm" aria-label="Edit <?= e($product['name']) ?>">
                                         <?= icon('edit', 14) ?> Edit
                                     </a>
                                 <?php endif; ?>
-                                <?php if (can('products.manage')): ?>
+                                <?php if (can('products.delete')): ?>
                                     <form method="post" action="<?= BASE_URL ?>/admin/product_delete.php"
                                           data-confirm
                                           data-confirm-title="Delete product?"

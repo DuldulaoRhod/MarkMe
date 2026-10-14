@@ -68,7 +68,7 @@ $chips = [
     </div>
     <?php if (can('products.view')): ?>
         <a href="<?= panel_url('products.php') ?>" class="btn btn-secondary">
-            <?= icon('package', 16) ?> <?= can('products.manage') ? 'Manage products' : 'View products' ?>
+            <?= icon('package', 16) ?> <?= can('products.edit') || can('products.create') ? 'Manage products' : 'View products' ?>
         </a>
     <?php endif; ?>
 </div>
@@ -121,7 +121,10 @@ $chips = [
                         </th>
                         <td class="mono-num" style="font-weight:600"><?= $stock ?></td>
                         <td>
-                            <?php if (can('inventory.manage')): ?>
+                            <?php /* inventory.adjust is what screens/inventory.php requires of
+                                     this POST, and the only one of the two an administrator
+                                     can actually grant. */ ?>
+                            <?php if (can('inventory.adjust')): ?>
                                 <form method="post" class="threshold-form">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="product_id" value="<?= (int)$product['product_id'] ?>">
@@ -143,11 +146,16 @@ $chips = [
                         </td>
                         <td>
                             <div class="table-actions">
+                                <?php /* Offered only to someone who may actually restock -
+                                         product_restock.php refuses anyone else, and a button
+                                         that always refuses is worse than no button. */ ?>
+                                <?php if (can('products.restock')): ?>
                                 <a href="<?= panel_url('product_restock.php') ?>?id=<?= (int)$product['product_id'] ?>"
                                    class="btn btn-outline-success btn-sm"
                                    aria-label="Restock <?= e($product['name']) ?>">
                                     <?= icon('plus', 14) ?> Restock
                                 </a>
+                                <?php endif; ?>
                             </div>
                         </td>
                     </tr>

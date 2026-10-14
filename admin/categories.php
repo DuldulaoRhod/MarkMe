@@ -67,9 +67,17 @@ $categories = $pager['rows'];
                             </td>
                             <td>
                                 <div class="table-actions">
+                                    <?php /* Each control is shown only to someone the matching
+                                             endpoint will accept. category_save.php and
+                                             category_delete.php check these same capabilities, so a
+                                             view-only staff member is no longer offered buttons
+                                             that would refuse them. */ ?>
+                                    <?php if (can('categories.edit')): ?>
                                     <a href="<?= BASE_URL ?>/admin/categories.php?edit=<?= (int)$cat['category_id'] ?>"
                                        class="btn btn-secondary btn-sm"><?= icon('edit', 14) ?> Edit</a>
+                                    <?php endif; ?>
                                     <?php $inUse = (int)$cat['product_count']; ?>
+                                    <?php if (can('categories.delete')): ?>
                                     <form method="post" action="<?= BASE_URL ?>/admin/category_delete.php"
                                           data-confirm
                                           data-confirm-title="Delete category?"
@@ -89,6 +97,7 @@ $categories = $pager['rows'];
                                             <?= icon('trash', 14) ?>
                                         </button>
                                     </form>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
@@ -104,6 +113,9 @@ $categories = $pager['rows'];
               require __DIR__ . '/../includes/backoffice/pager.php'; ?>
     </div>
 
+    <?php /* The form appears only for someone who may actually save through it:
+             creating when adding, editing when amending. */ ?>
+    <?php if (can($editing ? 'categories.edit' : 'categories.create')): ?>
     <aside class="summary-card">
         <h2 id="categoryForm"><?= $editing ? 'Edit category' : 'Add category' ?></h2>
         <div class="summary-body">
@@ -136,6 +148,7 @@ $categories = $pager['rows'];
             </form>
         </div>
     </aside>
+    <?php endif; ?>
 </div>
 
 <?php require __DIR__ . '/../includes/backoffice/shell_footer.php'; ?>

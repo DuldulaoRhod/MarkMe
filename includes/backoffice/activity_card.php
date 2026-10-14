@@ -20,7 +20,7 @@ switch ($ev['entity_type']) {
         }
         break;
     case 'product':
-        if (can('products.manage')) {
+        if (can('products.edit')) {
             $evLink = BASE_URL . '/admin/product_form.php?id=' . (int)$ev['entity_id'];
         } elseif (can('products.view')) {
             $evLink = panel_url('products.php');
@@ -31,8 +31,13 @@ switch ($ev['entity_type']) {
             $evLink = panel_url('customer_view.php?id=' . (int)$ev['entity_id']);
         }
         break;
+    case 'feedback':
+        if (can('feedback.view')) {
+            $evLink = panel_url('feedback_view.php?id=' . (int)$ev['entity_id']);
+        }
+        break;
     case 'category':
-        if (can('categories.manage')) {
+        if (can('categories.view')) {
             $evLink = BASE_URL . '/admin/categories.php';
         }
         break;
