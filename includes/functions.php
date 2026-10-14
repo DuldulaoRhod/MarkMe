@@ -723,6 +723,7 @@ function activity_modules(): array
         'Category Management',
         'Customization Options',
         'Customer Management',
+        'Feedback',
         'User Management',
         'Security',
         'General',

@@ -23,6 +23,9 @@ $lowStockCount = (int)db()->query(
 $lockedCount = (int)db()->query(
     'SELECT COUNT(*) FROM account_locks WHERE locked_at IS NOT NULL'
 )->fetchColumn();
+$newFeedback = (int)db()->query(
+    "SELECT COUNT(*) FROM feedback_messages WHERE status = 'new'"
+)->fetchColumn();
 $pendingOptions = (int)db()->query(
     "SELECT (SELECT COUNT(*) FROM shapes WHERE status = 'pending')
           + (SELECT COUNT(*) FROM designs WHERE status = 'pending')"
@@ -53,6 +56,7 @@ $groups = [
     ],
     'People' => [
         ['customers.php', 'users', 'Customers', null, 'customers.view'],
+        ['feedback.php', 'mail', 'Feedback', $newFeedback ?: null, 'feedback.view'],
         ['staff.php', 'shield', 'Staff', null, 'staff.manage'],
         ['staff_permissions.php', 'lock', 'Staff Permissions', null, 'permissions.manage'],
         ['admins.php', 'key', 'Admins', null, 'admins.manage'],
@@ -92,7 +96,7 @@ foreach ($groups as $label => $links) {
                 // keep their parent highlighted.
                 $owners = [
                     'customers.php' => ['customer_view.php'],
-                    'staff_permissions.php' => ['staff_permissions_edit.php'],
+                    'feedback.php' => ['feedback_view.php'],
                     'products.php' => ['product_form.php', 'product_restock.php'],
                     'orders.php' => ['order_view.php'],
                 ];

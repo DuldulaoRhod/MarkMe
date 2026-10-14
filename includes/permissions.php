@@ -107,6 +107,15 @@ function permission_catalog(): array
                 'reject' => 'Reject submissions',
             ],
         ],
+        'feedback' => [
+            'label' => 'Feedback',
+            'blurb' => 'Messages customers send through the contact form.',
+            'actions' => [
+                'view' => 'Read customer messages',
+                'manage' => 'Mark messages read or archived',
+                'delete' => 'Delete messages',
+            ],
+        ],
         'settings' => [
             'label' => 'Settings',
             'blurb' => 'Store configuration stays with administrators; '
