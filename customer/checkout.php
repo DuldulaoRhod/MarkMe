@@ -138,7 +138,17 @@ require __DIR__ . '/../includes/customer/header.php';
 
             <p class="summary-note" style="margin-top:var(--s-4)">
                 <?= icon('shield', 15) ?>
-                <span>No card details are collected and nothing is charged online.</span>
+                <?php /* The promise has to follow what is actually on offer: with card
+                         payments enabled, "nothing is charged online" is untrue. What
+                         stays true either way is that MarkMe never sees a card. */ ?>
+                <span>
+                    <?php if (paymongo_configured()): ?>
+                        Card payments are handled by PayMongo on their own secure page.
+                        MarkMe never sees or stores your card details.
+                    <?php else: ?>
+                        No card details are collected and nothing is charged online.
+                    <?php endif; ?>
+                </span>
             </p>
         </section>
 
