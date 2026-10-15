@@ -245,6 +245,77 @@ function paymongo_fetch_checkout(string $sessionId): array
 }
 
 /**
+ * What is configured, without ever revealing what the values are.
+ *
+ * The secret key is reported only as its prefix - sk_test_ or sk_live_ - which
+ * is the part that carries no secret material and is exactly what an
+ * administrator needs to see to know which mode the shop is in. The rest is
+ * never read into a page, a log or a form field.
+ *
+ * @return array{configured: bool, mode: string, public_set: bool,
+ *               secret_set: bool, webhook_set: bool, prefix: string,
+ *               webhook_url: string}
+ */
+function paymongo_status(): array
+{
+    $secret = defined('PAYMONGO_SECRET_KEY') ? PAYMONGO_SECRET_KEY : '';
+    $public = defined('PAYMONGO_PUBLIC_KEY') ? PAYMONGO_PUBLIC_KEY : '';
+    $hook = defined('PAYMONGO_WEBHOOK_SECRET') ? PAYMONGO_WEBHOOK_SECRET : '';
+
+    $prefix = '';
+    if ($secret !== '') {
+        // Everything up to and including the second underscore: "sk_test_".
+        $parts = explode('_', $secret);
+        $prefix = count($parts) >= 2 ? $parts[0] . '_' . $parts[1] . '_' : 'unrecognised';
+    }
+
+    return [
+        'configured' => $secret !== '',
+        'mode' => $secret === '' ? 'unset' : (str_starts_with($secret, 'sk_test') ? 'test' : 'live'),
+        'public_set' => $public !== '',
+        'secret_set' => $secret !== '',
+        'webhook_set' => $hook !== '',
+        'prefix' => $prefix,
+        'webhook_url' => BASE_URL . '/customer/paymongo_webhook.php',
+    ];
+}
+
+/**
+ * Ask PayMongo whether it accepts the configured secret key.
+ *
+ * Reads a checkout session id that cannot exist. Nothing is created and no
+ * money can move, but the answer still distinguishes the two cases that
+ * matter: a key PayMongo refuses comes back 401, while a key it accepts gets
+ * as far as "no such session" and returns 404. Anything else is reported as
+ * it came.
+ *
+ * @return array{ok: bool, message: string}
+ */
+function paymongo_ping(): array
+{
+    if (!paymongo_configured()) {
+        return ['ok' => false, 'message' => 'No secret key is configured yet.'];
+    }
+
+    $result = paymongo_request('GET', '/checkout_sessions/cs_connectivity_probe_not_a_real_session');
+
+    // A key that works gets far enough to be told the session does not exist.
+    if ($result['status'] === 404 || $result['ok']) {
+        return ['ok' => true, 'message' => 'PayMongo accepted the key.'];
+    }
+
+    if ($result['status'] === 401) {
+        return ['ok' => false, 'message' => 'PayMongo rejected the key. Check it was copied in full, and that it is the SECRET key (sk_...), not the public one.'];
+    }
+
+    if ($result['status'] === 0) {
+        return ['ok' => false, 'message' => 'Could not reach PayMongo. Check this machine has internet access.'];
+    }
+
+    return ['ok' => false, 'message' => 'PayMongo answered with HTTP ' . $result['status'] . '.'];
+}
+
+/**
  * Verify a webhook signature.
  *
  * The header carries a timestamp and two signatures: te for test-mode events

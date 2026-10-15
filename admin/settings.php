@@ -21,6 +21,16 @@ $editable = [
     'low_stock_default' => 'Default low-stock threshold',
 ];
 
+/* Asks PayMongo whether it accepts the key that is configured. Nothing is
+   created and no money can move - see paymongo_ping(). The result is a flash
+   message rather than stored state, because it is only true of this moment. */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'test_paymongo') {
+    csrf_check();
+    $ping = paymongo_ping();
+    flash_set($ping['ok'] ? 'success' : 'error', $ping['message']);
+    redirect('/admin/settings.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_settings') {
     csrf_check();
 
@@ -147,6 +157,103 @@ require __DIR__ . '/includes/admin_header.php';
 
     <!-- --------------------------- appearance ---------------------------- -->
     <?php require __DIR__ . '/../includes/backoffice/appearance_panel.php'; ?>
+
+    <!-- --------------------------- payments ------------------------------ -->
+    <?php
+    /* Status only. The keys themselves live in config/config.php, which is
+       gitignored and never read into this page - a secret key rendered into
+       HTML is a secret key in the browser's cache, in a screenshot, and in
+       whatever the page is printed to. */
+    $pm = paymongo_status();
+    ?>
+    <section class="card card-flush">
+        <div class="panel-head">
+            <h2 class="d-flex align-items-center gap-2"><?= icon('wallet', 18) ?> Online card payments</h2>
+            <span class="badge bg-<?= !$pm['configured'] ? 'secondary' : ($pm['mode'] === 'test' ? 'warning' : 'success') ?>">
+                <?= !$pm['configured'] ? 'Not configured' : ($pm['mode'] === 'test' ? 'Test mode' : 'LIVE mode') ?>
+            </span>
+        </div>
+        <div class="panel-body">
+            <?php if (!$pm['configured']): ?>
+                <p style="margin-top:0">
+                    PayMongo is built in but dormant: with no keys the card option does not
+                    appear at checkout, and customers see Cash on Delivery and Bank Transfer
+                    only. Nothing is broken &mdash; it is waiting for credentials.
+                </p>
+                <p class="form-text">
+                    Keys are issued to your own PayMongo account and cannot be supplied from
+                    here. To switch it on:
+                </p>
+                <ol class="form-text" style="padding-left:1.2rem;line-height:1.7">
+                    <li>Create a free account at
+                        <a href="https://dashboard.paymongo.com" target="_blank" rel="noopener">dashboard.paymongo.com</a>
+                        &mdash; test keys need no business verification.</li>
+                    <li>Open <strong>Developers &rarr; API keys</strong> and copy the
+                        <strong>test</strong> pair (<code>pk_test_&hellip;</code> and <code>sk_test_&hellip;</code>).</li>
+                    <li>Paste them into <code>config/config.php</code> as
+                        <code>PAYMONGO_PUBLIC_KEY</code> and <code>PAYMONGO_SECRET_KEY</code>.</li>
+                    <li>Reload this page and press <strong>Test connection</strong>.</li>
+                </ol>
+            <?php else: ?>
+                <p style="margin-top:0">
+                    <?php if ($pm['mode'] === 'test'): ?>
+                        Running against PayMongo's test environment. Cards are simulated and no
+                        real money moves.
+                    <?php else: ?>
+                        <strong>Live keys are configured. Real cards will be charged.</strong>
+                    <?php endif; ?>
+                </p>
+            <?php endif; ?>
+
+            <dl class="payment-facts" style="margin-bottom:var(--s-4)">
+                <dt>Secret key</dt>
+                <dd><?= $pm['secret_set'] ? e($pm['prefix']) . '&hellip; set' : 'not set' ?></dd>
+                <dt>Public key</dt>
+                <dd><?= $pm['public_set'] ? 'set' : 'not set' ?></dd>
+                <dt>Webhook secret</dt>
+                <dd><?= $pm['webhook_set'] ? 'set' : 'not set &mdash; webhooks will be refused' ?></dd>
+                <dt>Webhook URL</dt>
+                <dd><?= e($pm['webhook_url']) ?></dd>
+            </dl>
+
+            <?php if ($pm['configured'] && !$pm['webhook_set']): ?>
+                <p class="form-text" style="margin-bottom:var(--s-4)">
+                    Without a webhook secret every delivery is refused, so an order will only
+                    settle if the customer returns to the site. Add the endpoint above under
+                    <strong>Developers &rarr; Webhooks</strong>, subscribe it to
+                    <code>checkout_session.payment.paid</code>, and put the signing secret in
+                    <code>PAYMONGO_WEBHOOK_SECRET</code>.
+                </p>
+            <?php endif; ?>
+
+            <?php if (str_contains($pm['webhook_url'], 'localhost') || str_contains($pm['webhook_url'], '127.0.0.1')): ?>
+                <p class="form-text" style="margin-bottom:var(--s-4)">
+                    <?= icon('alert', 14) ?>
+                    PayMongo cannot reach <code>localhost</code>. For webhooks to arrive while
+                    developing, expose this machine with a tunnel (ngrok or similar) and
+                    register that address instead.
+                </p>
+            <?php endif; ?>
+
+            <div class="setting-row">
+                <div>
+                    <p class="setting-title">Test connection</p>
+                    <p class="form-text" style="margin:0">
+                        Asks PayMongo whether it accepts the configured key. Nothing is
+                        created and no payment can be taken.
+                    </p>
+                </div>
+                <form method="post">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="test_paymongo">
+                    <button type="submit" class="btn btn-secondary btn-sm"
+                            <?= $pm['configured'] ? '' : 'disabled' ?>>
+                        <?= icon('refresh', 15) ?> Test connection
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
 
     <!-- ------------------------ system preferences ----------------------- -->
     <section class="card card-flush">
