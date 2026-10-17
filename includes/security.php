@@ -28,7 +28,8 @@ function sec_max_attempts(): int
 /** Idle seconds before the session is destroyed. Demo baseline: 120. */
 function sec_session_timeout(): int
 {
-    return max(30, (int)setting('session_timeout_secs', '120'));
+    // 900s when unset: the same working default the Security screen offers.
+    return max(30, (int)setting('session_timeout_secs', '900'));
 }
 
 /** Minimum password length. Required baseline: 12. */

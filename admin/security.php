@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Clamped server-side. A max-attempts of 0 would lock everyone out on
         // their first typo; an hour-long idle window is not a timeout.
         $attempts = max(1, min(10, (int)($_POST['max_login_attempts'] ?? 3)));
-        $timeout = max(30, min(3600, (int)($_POST['session_timeout_secs'] ?? 120)));
+        $timeout = max(30, min(3600, (int)($_POST['session_timeout_secs'] ?? 900)));
         $minLen = max(8, min(64, (int)($_POST['password_min_length'] ?? 12)));
         $expiry = max(0, min(365, (int)($_POST['password_expiry_days'] ?? 90)));
         $lockMins = max(0, min(1440, (int)($_POST['lockout_minutes'] ?? 15)));
@@ -355,8 +355,14 @@ $pendingActivation = (int)db()->query(
                         <label class="form-label" for="secTimeout">Session timeout (seconds)</label>
                         <input type="number" id="secTimeout" name="session_timeout_secs" class="form-control"
                                min="30" max="3600" value="<?= sec_session_timeout() ?>" required>
-                        <p class="form-text">Demonstration baseline: 120 (2 minutes). Idle sessions are
-                            destroyed and the user is told why.</p>
+                        <p class="form-text">
+                                How long an account may sit idle before it is signed out. 900 (15 minutes)
+                                is the working default &mdash; long enough to read a page without being
+                                thrown out, short enough that an unattended machine does not stay open.
+                                Drop it to 120 if you need to demonstrate the timeout quickly; much below
+                                that signs people out mid-task.
+                                Idle sessions are destroyed server-side and the user is told why.
+                            </p>
                     </div>
 
                     <div class="field-group">
