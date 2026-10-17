@@ -78,13 +78,12 @@ $here = current_path();
                         <label class="form-label" for="loginPassword">Password</label>
                         <input type="password" id="loginPassword" name="password" class="form-control" autocomplete="current-password" required>
                     </div>
-                    <?php /* Signing in is checked too, not just registering: an
-                             unprotected login form is the one a script actually
-                             wants, because that is where passwords get guessed.
-                             customer/login.php verifies it server-side before it
-                             looks at the password. */ ?>
-                    <?php $captchaId = 'loginCaptcha';
-                          require __DIR__ . '/captcha_field.php'; ?>
+                    <?php /* No CAPTCHA on sign-in. Guessing is held back by the
+                             lockout instead, which counts failures per account
+                             and stops them server-side. Registration still
+                             carries one - see the register form below - because
+                             that is the form a script uses to create accounts in
+                             bulk, where there is no account yet to lock. */ ?>
 
                     <button type="submit" class="btn btn-primary btn-lg btn-block">Log in</button>
                 </form>
