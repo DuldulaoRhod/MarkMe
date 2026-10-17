@@ -230,6 +230,36 @@ function role_capabilities(string $role): array
     return [];
 }
 
+/**
+ * Seconds before the current session goes stale, or null when there is none.
+ *
+ * Lives here rather than in security.php because every entry point loads this
+ * file, and the storefront header does not load that one - which is how the
+ * first attempt took the shop down with an undefined function.
+ *
+ * The timeout is read the same way the expiry check reads it. This is not a
+ * second source of truth: the server still decides, and all the browser does
+ * with the number is come back and ask again when it runs out.
+ */
+function session_seconds_left(): ?int
+{
+    if (!is_logged_in()) {
+        return null;
+    }
+
+    try {
+        $stmt = db()->prepare('SELECT setting_value FROM settings WHERE setting_key = :k');
+        $stmt->execute(['k' => 'session_timeout_secs']);
+        $timeout = max(30, (int)($stmt->fetchColumn() ?: 120));
+    } catch (Throwable $e) {
+        $timeout = 120;
+    }
+
+    $last = (int)($_SESSION['last_activity'] ?? time());
+
+    return max(0, $timeout - (time() - $last));
+}
+
 /** True when the signed-in user holds $capability. */
 function can(string $capability): bool
 {

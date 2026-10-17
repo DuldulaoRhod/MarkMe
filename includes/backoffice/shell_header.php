@@ -30,7 +30,7 @@ $flashError = flash_get('error');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <?php require __DIR__ . '/../../includes/styles.php'; ?>
 </head>
-<body class="admin-body">
+<body class="admin-body"<?php if (($left = session_seconds_left()) !== null): ?> data-session-left="<?= $left ?>"<?php endif; ?>>
 <div class="admin-shell">
     <?php require __DIR__ . '/../../includes/backoffice/sidebar.php'; ?>
     <div class="admin-scrim" id="adminScrim"></div>

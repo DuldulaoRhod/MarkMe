@@ -2,7 +2,7 @@
 /**
  * Administrator sign-out.
  *
- * Lands on the storefront rather than /admin/login.php: signing out should put
+ * Lands on the storefront, which is now where everyone signs in: signing out should put
  * you on the site, not on a locked door into the panel you just left. The
  * marker tells the storefront to open its sign-in dialog, and tells the theme
  * bootstrap to forget the stored dark-mode choice, so the machine is handed

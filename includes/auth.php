@@ -44,16 +44,16 @@ function bounce_expired_session(): void
         json_response([
             'ok' => false,
             'session_expired' => true,
-            'login_url' => BASE_URL . (is_backoffice_path() ? '/admin/login.php' : '/customer/index.php'),
+            'login_url' => BASE_URL . '/customer/index.php',
             'message' => 'Your session has expired. Please sign in again.',
         ], 401);
     }
 
-    /* Back to the door they came in by. This used to send everyone to the
-       storefront, which dropped an administrator whose session timed out onto
-       a shop page with a customer sign-in dialog. The message flashes
-       (error, login_error) are left set for whichever page renders them. */
-    redirect(is_backoffice_path() ? '/admin/login.php' : '/customer/index.php');
+    /* One sign-in dialog for everyone, on the storefront. The message flashes
+       (error, login_error) are left set for it to render, and reopen_modal
+       tells it to open. */
+    flash_set('reopen_modal', 'login');
+    redirect('/customer/index.php');
 }
 
 /**
@@ -110,14 +110,6 @@ function require_login(): void
     }
 
     enforce_password_expiry();
-}
-
-/** Is this request inside the back office? Decides which login page to offer. */
-function is_backoffice_path(): bool
-{
-    $path = $_SERVER['SCRIPT_NAME'] ?? '';
-
-    return str_contains($path, '/admin/') || str_contains($path, '/staff/');
 }
 
 /** Administrator only. Staff hitting this get the same refusal as a guest. */
@@ -182,7 +174,7 @@ function deny_access(string $message): never
             json_response([
                 'ok' => false,
                 'session_expired' => true,
-                'login_url' => BASE_URL . (is_backoffice_path() ? '/admin/login.php' : '/customer/index.php'),
+                'login_url' => BASE_URL . '/customer/index.php',
                 'message' => 'Your session has expired. Please sign in again.',
             ], 401);
         }
@@ -193,9 +185,8 @@ function deny_access(string $message): never
         flash_set('reopen_modal', 'login');
         flash_set('login_return_to', safe_local_path(current_path()));
 
-        // Back to the door they came in by: the panel login for the back
-        // office, the storefront modal for everyone else.
-        redirect(is_backoffice_path() ? '/admin/login.php' : '/customer/index.php');
+        // One sign-in dialog for everyone, on the storefront.
+        redirect('/customer/index.php');
     }
 
     http_response_code(403);
