@@ -49,9 +49,14 @@ if ($action === 'confirm') {
         redirect($back . '#mfa');
     }
 
+    /* mfa_method is written alongside the secret. It used to be left at
+       'none' while MFA was on, which only worked because the challenge page
+       treats an unrecognised method as TOTP - a half-written state that holds
+       until something reads the method and believes it. */
     db()->prepare(
-        'UPDATE users SET mfa_secret = :secret, mfa_enabled = 1, mfa_confirmed_at = NOW()
-          WHERE user_id = :id'
+        "UPDATE users SET mfa_secret = :secret, mfa_enabled = 1, mfa_method = 'totp',
+                          mfa_confirmed_at = NOW()
+          WHERE user_id = :id"
     )->execute(['secret' => $candidate, 'id' => $userId]);
 
     unset($_SESSION['mfa_candidate']);
@@ -59,6 +64,7 @@ if ($action === 'confirm') {
     // Keep the live session in step, so the Settings page reflects reality
     // without a re-login.
     $_SESSION['user']['mfa_enabled'] = 1;
+    $_SESSION['user']['mfa_method'] = 'totp';
 
     log_activity(
         'account.mfa_enabled',
@@ -89,11 +95,13 @@ if ($action === 'disable') {
     }
 
     db()->prepare(
-        'UPDATE users SET mfa_secret = NULL, mfa_enabled = 0, mfa_confirmed_at = NULL
-          WHERE user_id = :id'
+        "UPDATE users SET mfa_secret = NULL, mfa_enabled = 0, mfa_method = 'none',
+                          mfa_confirmed_at = NULL
+          WHERE user_id = :id"
     )->execute(['id' => $userId]);
 
     $_SESSION['user']['mfa_enabled'] = 0;
+    $_SESSION['user']['mfa_method'] = 'none';
 
     log_activity(
         'account.mfa_disabled',

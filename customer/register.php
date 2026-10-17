@@ -75,10 +75,16 @@ if ($errors) {
 // nothing reads.
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
+/* Two-factor is on from the start rather than opt-in. No secret is stored
+   yet: the account is enabled-but-not-enrolled, and the first sign-in sends
+   them to auth/mfa_enrol.php to set up an authenticator before the session
+   opens. Switching it on with nothing to verify against is exactly what that
+   enrolment step exists to resolve. */
 $stmt = db()->prepare(
     'INSERT INTO users (role, username, email, password_hash, full_name, contact_number, address,
-                        is_active, password_changed_at)
-     VALUES (\'customer\', :username, :email, :hash, :full_name, :contact_number, :address, 0, NOW())'
+                        is_active, mfa_enabled, mfa_method, password_changed_at)
+     VALUES (\'customer\', :username, :email, :hash, :full_name, :contact_number, :address,
+             0, 1, \'totp\', NOW())'
 );
 $stmt->execute([
     'username' => $old['username'],
