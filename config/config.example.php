@@ -49,11 +49,26 @@ define('AV_TIMEOUT_SECONDS', 20);
 //      <your BASE_URL>/customer/paymongo_webhook.php, subscribe to
 //      checkout_session.payment.paid, and copy the signing secret it returns.
 //
-// Leave these blank and MarkMe keeps offering Cash on Delivery and Bank
+// Two ways to supply them, checked in this order:
+//
+//   1. Environment variables - PAYMONGO_PUBLIC_KEY, PAYMONGO_SECRET_KEY and
+//      PAYMONGO_WEBHOOK_SECRET. Nothing is then written into any file in the
+//      project, which is the safest option: a key that was never in a file
+//      cannot be committed, copied into a screenshot or left in a backup.
+//      Under XAMPP, add to httpd.conf (or a vhost) and restart Apache:
+//
+//          SetEnv PAYMONGO_PUBLIC_KEY   pk_test_xxxxxxxx
+//          SetEnv PAYMONGO_SECRET_KEY   sk_test_xxxxxxxx
+//          SetEnv PAYMONGO_WEBHOOK_SECRET whsk_xxxxxxxx
+//
+//   2. Otherwise, the literal below. config.php is gitignored, so this is
+//      safe for local development - but the value does end up in a file.
+//
+// Leave both unset and MarkMe keeps offering Cash on Delivery and Bank
 // Transfer only - the card option simply does not appear.
-define('PAYMONGO_PUBLIC_KEY', '');
-define('PAYMONGO_SECRET_KEY', '');
-define('PAYMONGO_WEBHOOK_SECRET', '');
+define('PAYMONGO_PUBLIC_KEY', getenv('PAYMONGO_PUBLIC_KEY') ?: '');
+define('PAYMONGO_SECRET_KEY', getenv('PAYMONGO_SECRET_KEY') ?: '');
+define('PAYMONGO_WEBHOOK_SECRET', getenv('PAYMONGO_WEBHOOK_SECRET') ?: '');
 
 // Personalized bookmark text. Enforced server-side in add_to_cart.php and
 // design_save.php; the studio's maxlength mirrors it for a good experience.

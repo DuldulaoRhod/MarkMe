@@ -203,8 +203,14 @@ $self = BASE_URL . '/admin/' . basename($_SERVER['SCRIPT_NAME']);
                     <label class="dropzone dropzone-sm" for="optImage">
                         <span class="dz-icon" aria-hidden="true"><?= icon('upload', 20) ?></span>
                         <span class="dz-title">Drop an image here, or choose one</span>
+                        <?php /* Every limit the server actually enforces, stated where
+                                 the file is chosen. The minimum was missing: it is
+                                 checked in handle_image_upload() via getimagesize(),
+                                 so a small image was rejected after upload with no
+                                 warning beforehand. */ ?>
                         <span class="dz-hint">JPG, PNG or WEBP &middot; up to
-                            <?= (int)(MAX_UPLOAD_BYTES / 1048576) ?>MB</span>
+                            <?= (int)(MAX_UPLOAD_BYTES / 1048576) ?>MB &middot; at least
+                            <?= MIN_UPLOAD_PIXELS ?>&times;<?= MIN_UPLOAD_PIXELS ?>px</span>
                         <input type="file" id="optImage" name="image"
                                accept=".jpg,.jpeg,.png,.webp"
                                data-dz-input <?= $editing ? '' : 'required' ?>>

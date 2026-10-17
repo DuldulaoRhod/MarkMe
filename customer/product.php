@@ -469,7 +469,8 @@ require __DIR__ . '/../includes/customer/header.php';
                             <span class="dz-icon" aria-hidden="true"><?= icon('upload', 20) ?></span>
                             <span class="dz-title">Drop a photo here, or click to choose one</span>
                             <span class="dz-hint">JPG, PNG or WEBP &middot; up to
-                                <?= (int)(MAX_UPLOAD_BYTES / 1048576) ?>MB</span>
+                                <?= (int)(MAX_UPLOAD_BYTES / 1048576) ?>MB &middot; at least
+                                <?= MIN_UPLOAD_PIXELS ?>&times;<?= MIN_UPLOAD_PIXELS ?>px</span>
                             <input type="file" id="custom_image" name="custom_image"
                                    accept=".jpg,.jpeg,.png,.webp" data-dz-input>
                         </label>
