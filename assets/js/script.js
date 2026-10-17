@@ -1899,14 +1899,35 @@ const phLocations = () => {
    secret, so it must never be sent to an external QR image service. */
 (() => {
   const holder = $("#mfaQr[data-otpauth]");
-  if (!holder || typeof QRCode === "undefined") return;
+  if (!holder) return;
 
-  new QRCode(holder, {
-    text: holder.dataset.otpauth,
-    width: 168,
-    height: 168,
-    correctLevel: QRCode.CorrectLevel.M,
-  });
+  /* Say so rather than leaving an empty white box. The library is served
+     from this project now, but a blocked or failed script used to make the
+     QR silently not exist, and the only way to tell was that nothing
+     appeared where a code should be. The key underneath still works. */
+  const giveUp = (why) => {
+    holder.innerHTML =
+      '<p class="form-text" style="margin:0;max-width:16rem">' +
+      "The QR code could not be drawn (" + why + "). " +
+      "Enter the key shown beside this box into your authenticator app instead." +
+      "</p>";
+  };
+
+  if (typeof QRCode === "undefined") {
+    giveUp("the QR library did not load");
+    return;
+  }
+
+  try {
+    new QRCode(holder, {
+      text: holder.dataset.otpauth,
+      width: 168,
+      height: 168,
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  } catch (err) {
+    giveUp("an error while drawing it");
+  }
 })();
 
 /* ------------------------------------------------- confirmation dialog */

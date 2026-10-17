@@ -179,7 +179,10 @@ $uri = totp_uri($candidate, (string)$account['email']);
     </p>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<?php /* Served from this project, not a CDN. A blocker extension or an
+         offline machine silently stopped the hosted copy loading, and the
+         enrolment box simply came up empty with no explanation. */ ?>
+<script src="<?= BASE_URL ?>/assets/js/vendor/qrcode.min.js?v=<?= @filemtime(__DIR__ . '/../assets/js/vendor/qrcode.min.js') ?>"></script>
 <script src="<?= BASE_URL ?>/assets/js/script.js?v=<?= filemtime(__DIR__ . '/../assets/js/script.js') ?>"></script>
 </body>
 </html>
