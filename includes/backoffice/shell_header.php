@@ -22,6 +22,27 @@ $flashError = flash_get('error');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<?php
+/* When this session goes stale, come back and ask.
+   
+   The server decides expiry, but it only gets to decide when something asks
+   it - so a tab left open sat there looking signed in until the next click.
+   This reloads the page a couple of seconds after the session is due to
+   expire; the server's own check then runs, destroys the session and
+   redirects to the sign-in dialog with the reason attached.
+   
+   Plain HTML on purpose. The same thing in JavaScript lives at the end of a
+   two-thousand-line file, where any unrelated error above it would stop it
+   running, and a blocked or failed script would take the behaviour with it.
+   A meta refresh has nothing to break.
+   
+   The page decides nothing: if the session was extended in another tab, the
+   reload simply renders the page again with a fresh countdown. */
+$sessionLeft = session_seconds_left();
+if ($sessionLeft !== null):
+?>
+    <meta http-equiv="refresh" content="<?= $sessionLeft + 2 ?>">
+<?php endif; ?>
     <meta name="robots" content="noindex, nofollow">
     <title><?= e($pageTitle) ?> · MarkMe Admin</title>
 <?php require __DIR__ . '/../../includes/theme_boot.php'; ?>
