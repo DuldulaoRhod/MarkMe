@@ -2091,3 +2091,109 @@ const phLocations = () => {
 $$("[data-pager-size]").forEach((select) => {
   select.addEventListener("change", () => select.form?.submit());
 });
+
+/* -------------------------------------------------- page transitions */
+/* base.css opts this site into cross-document view transitions. The browser
+   then starts a transition on every same-origin navigation and finishes it
+   when the next document opts in too.
+   
+   Some navigations cannot finish one, and the browser reports the abort as an
+   unhandled promise rejection:
+   
+     InvalidStateError: Transition was aborted because of invalid state.
+     ViewTransition opt-in disabled
+   
+   The ones that matter here leave the site or leave HTML behind: checkout
+   hands the customer to PayMongo's hosted page, and a file download or a JSON
+   endpoint never opts in. Nothing is broken when this happens - the navigation
+   goes through either way - but a console full of rejections hides real
+   errors, and a half-started transition is a frame the browser is holding for
+   a page that will never arrive.
+   
+   So the transition is skipped deliberately before it can be aborted. */
+if ("onpageswap" in window) {
+  window.addEventListener("pageswap", (event) => {
+    if (!event.viewTransition) return;
+
+    const target = event.activation?.entry?.url;
+    if (!target) {
+      // Nothing to judge: let the browser decide as it would have.
+      return;
+    }
+
+    let destination;
+    try {
+      destination = new URL(target);
+    } catch {
+      return;
+    }
+
+    /* Cross-origin is the payment redirect. Same-origin but not a page -
+       a webhook, an image endpoint, a download - cannot opt in either. */
+    const leavingSite = destination.origin !== window.location.origin;
+    const notAPage = /\.(json|png|jpe?g|webp|svg|pdf|zip|csv|wav)$/i.test(destination.pathname);
+
+    if (leavingSite || notAPage) {
+      event.viewTransition.skipTransition();
+    }
+  });
+}
+
+/* A transition can still be aborted for reasons outside this file - a second
+   navigation interrupting the first when someone clicks twice, or a browser
+   that changes its mind mid-flight. Those rejections are swallowed here, and
+   only those: anything that is not a view-transition abort is re-thrown so a
+   real bug still reaches the console. */
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  if (!reason) return;
+
+  const isTransitionAbort =
+    reason.name === "AbortError" ||
+    (reason.name === "InvalidStateError" &&
+      /view\s*transition|transition was aborted/i.test(String(reason.message)));
+
+  if (isTransitionAbort) {
+    event.preventDefault();
+  }
+});
+
+/* ------------------------------------------------ session expiry (AJAX) */
+/* The server is authoritative about session timeouts: every protected page
+   and endpoint checks it in PHP. But a page left open still holds live
+   buttons, and an expired fetch would otherwise fail quietly - the cart
+   would simply stop updating with no explanation.
+   
+   Protected endpoints answer an expired session with 401 and
+   {session_expired: true, login_url}. This notices that one shape and sends
+   the browser to the login page, which is the same place a normal navigation
+   would have been redirected to. Every other response is passed through
+   untouched, so this cannot swallow a real error. */
+(() => {
+  const nativeFetch = window.fetch;
+  if (typeof nativeFetch !== "function") return;
+
+  let redirecting = false;
+
+  window.fetch = async function (...args) {
+    const response = await nativeFetch.apply(this, args);
+
+    if (response.status !== 401 || redirecting) return response;
+
+    /* Read a copy: the caller still needs to read the body itself, and a
+       Response body can only be consumed once. */
+    let payload = null;
+    try {
+      payload = await response.clone().json();
+    } catch {
+      return response;   // not our JSON shape; leave it alone
+    }
+
+    if (payload && payload.session_expired) {
+      redirecting = true;
+      window.location.href = payload.login_url || (document.documentElement.dataset.base || "") + "/customer/index.php";
+    }
+
+    return response;
+  };
+})();
