@@ -202,6 +202,24 @@ require __DIR__ . '/../includes/customer/header.php';
                     </div>
                 </div>
                 <div class="summary-foot">
+                    <?php /* Only once it has actually been sent. The customer is the
+                             one side that knows whether the parcel arrived, so this is
+                             theirs to confirm - but only from On Shipping, and
+                             order_complete.php enforces that again server-side. */ ?>
+                    <?php if ($order['status'] === 'On Shipping'): ?>
+                        <form method="post" action="<?= BASE_URL ?>/customer/order_complete.php"
+                              data-confirm
+                              data-confirm-title="Confirm your order arrived?"
+                              data-confirm-body="This marks order #<?= e(order_reference($order)) ?> as completed."
+                              data-confirm-note="Only do this once the parcel is actually in your hands."
+                              data-confirm-action="Yes, it arrived">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="order_id" value="<?= (int)$order['order_id'] ?>">
+                            <button type="submit" class="btn btn-primary btn-block">
+                                <?= icon('check', 16) ?> I received this order
+                            </button>
+                        </form>
+                    <?php endif; ?>
                     <a href="<?= BASE_URL ?>/customer/orders.php" class="btn btn-secondary btn-block">
                         <?= icon('arrow-left', 16) ?> All orders
                     </a>

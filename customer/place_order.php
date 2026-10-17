@@ -124,6 +124,21 @@ try {
         $orderId
     );
 
+    /* Emailed after the commit, like the audit entry above: the order exists
+       whether or not the message gets out, and a failed send must never undo
+       it. receipt_send() reports what actually happened rather than assuming,
+       and writes to storage/outbox when SMTP is not configured, so the receipt
+       can still be read during development. */
+    $receipt = receipt_send($orderId, $user['email'] ?? null);
+    if ($receipt['sent']) {
+        /* Said only when it actually went. Telling someone to check their
+           inbox for a message that was never sent is worse than saying
+           nothing at all. */
+        flash_set('receipt_sent', $receipt['address']);
+    } else {
+        error_log('place_order: receipt for #' . $orderId . ' not emailed - ' . $receipt['reason']);
+    }
+
     /* A card order is not finished yet: it has been recorded as Pending and
        now needs paying. The amount sent to PayMongo is $total, computed above
        from the products table - the browser never supplied a figure, and this

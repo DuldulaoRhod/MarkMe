@@ -9,6 +9,7 @@ require_once __DIR__ . '/pagination.php';
 require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/icons.php';
+require_once __DIR__ . '/receipts.php';
 
 /**
  * Send an expired session back to the public site with its explanation.

@@ -65,6 +65,13 @@ require __DIR__ . '/../includes/customer/header.php';
             change on the order page.</p>
     <?php endif; ?>
 
+    <?php if ($receiptTo = flash_get('receipt_sent')): ?>
+        <p class="form-text" style="margin-bottom:var(--s-5)">
+            <?= icon('mail', 15) ?>
+            A receipt has been emailed to <strong><?= e($receiptTo) ?></strong>.
+        </p>
+    <?php endif; ?>
+
     <dl class="confirm-facts">
         <div>
             <dt>Order number</dt>

@@ -214,6 +214,20 @@ require __DIR__ . '/../includes/customer/header.php';
                                     </button>
                                 </form>
                             <?php endif; ?>
+                            <?php if ($order['status'] === 'On Shipping'): ?>
+                                <form method="post" action="<?= BASE_URL ?>/customer/order_complete.php"
+                                      data-confirm
+                                      data-confirm-title="Confirm your order arrived?"
+                                      data-confirm-body="This marks order #<?= e(order_reference($order)) ?> as completed."
+                                      data-confirm-note="Only do this once the parcel is actually in your hands."
+                                      data-confirm-action="Yes, it arrived">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="order_id" value="<?= $oid ?>">
+                                    <button type="submit" class="btn btn-primary btn-sm">
+                                        <?= icon('check', 14) ?> Received
+                                    </button>
+                                </form>
+                            <?php endif; ?>
                             <a href="<?= BASE_URL ?>/customer/order_detail.php?id=<?= $oid ?>"
                                class="btn btn-secondary btn-sm">
                                 View Order <?= icon('chevron-right', 14) ?>
