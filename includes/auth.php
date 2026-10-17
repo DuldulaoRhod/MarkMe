@@ -35,9 +35,25 @@ function bounce_expired_session(): void
     // the destination page renders, so clearing this one loses nothing.
     unset($_SESSION['flash']['session_expired']);
 
-    // The storefront renders those as a styled banner and reopens the sign-in
-    // dialog, so one destination serves customers and managers alike.
-    redirect('/customer/index.php');
+    /* An AJAX caller cannot follow a redirect usefully: it would get a page of
+       HTML back where it expected JSON, and the failure would be silent. It
+       gets one recognisable shape instead, and the client sends the browser to
+       the login page itself. 401 rather than 403 - the request was not
+       authenticated, not authenticated-and-refused. */
+    if (is_ajax()) {
+        json_response([
+            'ok' => false,
+            'session_expired' => true,
+            'login_url' => BASE_URL . (is_backoffice_path() ? '/admin/login.php' : '/customer/index.php'),
+            'message' => 'Your session has expired. Please sign in again.',
+        ], 401);
+    }
+
+    /* Back to the door they came in by. This used to send everyone to the
+       storefront, which dropped an administrator whose session timed out onto
+       a shop page with a customer sign-in dialog. The message flashes
+       (error, login_error) are left set for whichever page renders them. */
+    redirect(is_backoffice_path() ? '/admin/login.php' : '/customer/index.php');
 }
 
 /**
@@ -70,6 +86,18 @@ function require_login(): void
     bounce_expired_session();
 
     if (!is_logged_in()) {
+        /* An AJAX caller cannot follow a redirect usefully - it would get the
+           storefront's HTML back where it expected JSON. It gets the same
+           session-expired shape the back office uses instead. */
+        if (is_ajax()) {
+            json_response([
+                'ok' => false,
+                'session_expired' => true,
+                'login_url' => BASE_URL . '/customer/index.php',
+                'message' => 'Your session has expired. Please sign in again.',
+            ], 401);
+        }
+
         // A session that just timed out has already explained itself. Saying
         // "Please log in to continue" over the top of that would replace the
         // reason with a blank instruction.
@@ -82,6 +110,14 @@ function require_login(): void
     }
 
     enforce_password_expiry();
+}
+
+/** Is this request inside the back office? Decides which login page to offer. */
+function is_backoffice_path(): bool
+{
+    $path = $_SERVER['SCRIPT_NAME'] ?? '';
+
+    return str_contains($path, '/admin/') || str_contains($path, '/staff/');
 }
 
 /** Administrator only. Staff hitting this get the same refusal as a guest. */
@@ -128,6 +164,40 @@ function require_can(string $capability): void
  */
 function deny_access(string $message): never
 {
+    /* Not signed in is a different answer from not allowed.
+    
+       An expired back-office session used to land here and be shown "Access
+       denied" - a 403 that reads like a permissions problem when the real
+       answer is "your session ended, sign in again". Worse, there was no way
+       back: the page offered no login. Only a caller who IS signed in and
+       still lacks the capability gets the refusal page below. */
+    if (!is_logged_in()) {
+        $expired = !empty($_SESSION['flash']['session_expired'])
+            || !empty($_SESSION['flash']['login_error']);
+
+        if (is_ajax()) {
+            /* One shape for every expired AJAX call, so the client has a
+               single thing to recognise. 401, not 403: the request was not
+               authenticated, rather than authenticated and refused. */
+            json_response([
+                'ok' => false,
+                'session_expired' => true,
+                'login_url' => BASE_URL . (is_backoffice_path() ? '/admin/login.php' : '/customer/index.php'),
+                'message' => 'Your session has expired. Please sign in again.',
+            ], 401);
+        }
+
+        if (!$expired) {
+            flash_set('login_error', 'Please sign in to continue.');
+        }
+        flash_set('reopen_modal', 'login');
+        flash_set('login_return_to', safe_local_path(current_path()));
+
+        // Back to the door they came in by: the panel login for the back
+        // office, the storefront modal for everyone else.
+        redirect(is_backoffice_path() ? '/admin/login.php' : '/customer/index.php');
+    }
+
     http_response_code(403);
 
     if (is_ajax()) {
@@ -205,6 +275,10 @@ function attempt_login(string $identifier, string $password): array
     // oracle.
     $generic = 'Invalid username/email or password.';
 
+    /* Shown whenever the account is barred, whether it just locked or was
+       already locked. It names no threshold, no count and no account. */
+    $lockedMessage = 'Unable to sign in at this time. Please try again later.';
+
     $stmt = db()->prepare(
         'SELECT * FROM users WHERE username = :username OR email = :email LIMIT 1'
     );
@@ -237,11 +311,11 @@ function attempt_login(string $identifier, string $password): array
             $user,
             'Authentication'
         );
-        return $fail(
-            'locked',
-            'This account is locked after ' . sec_max_attempts()
-            . ' failed sign-in attempts. An administrator must unlock it.'
-        );
+        /* Deliberately vague. Naming the threshold, the count or even the
+           fact that this particular account is locked tells an attacker how
+           close they are and confirms the account exists. The audit entry
+           above carries the detail for whoever is allowed to see it. */
+        return $fail('locked', $lockedMessage);
     }
 
     // ---- password -------------------------------------------------------
@@ -266,18 +340,14 @@ function attempt_login(string $identifier, string $password): array
                 $user,
                 'Authentication'
             );
-            return $fail(
-                'locked',
-                'This account is now locked after ' . $result['attempts']
-                . ' failed attempts. An administrator must unlock it.'
-            );
+            return $fail('locked', $lockedMessage);
         }
 
-        $left = max(0, sec_max_attempts() - $result['attempts']);
-        return $fail(
-            'invalid',
-            $generic . ' ' . $left . ' ' . ($left === 1 ? 'attempt' : 'attempts') . ' remaining.'
-        );
+        /* The count that used to be appended here - "2 attempts remaining" -
+           told an attacker exactly how many guesses were left and how many
+           had already been spent against this account. The lockout still
+           runs; it just no longer narrates itself. */
+        return $fail('invalid', $generic);
     }
 
     // ---- activated? -----------------------------------------------------
@@ -306,14 +376,26 @@ function attempt_login(string $identifier, string $password): array
        codes - which has no secret - would have walked straight past this gate
        into a full session. */
     $mfaMethod = $user['mfa_method'] ?? 'totp';
-    $hasFactor = (int)$user['mfa_enabled'] === 1
-        && ($mfaMethod === 'email' || !empty($user['mfa_secret']));
+    $mfaOn = (int)$user['mfa_enabled'] === 1;
 
-    if ($hasFactor) {
-        // A half-open session: enough to finish the TOTP step and nothing
-        // else. $_SESSION['user'] is deliberately NOT set, so every
-        // require_login()/require_can() in the app still treats this as a
-        // guest until the code checks out.
+    /* Enabled is not the same as usable. A factor can only challenge someone
+       if the means to deliver it exists: a TOTP account needs a confirmed
+       secret, and an email account needs mail to be configured. An account
+       switched on without either is not a locked account - it is one that has
+       not finished enrolling, and it gets sent to do exactly that. */
+    $hasFactor = $mfaOn && ($mfaMethod === 'email'
+        ? mail_configured()
+        : !empty($user['mfa_secret']));
+
+    $needsEnrolment = $mfaOn && !$hasFactor;
+
+    if ($hasFactor || $needsEnrolment) {
+        /* A half-open session: enough to finish the second-factor step and
+           nothing else. $_SESSION['user'] is deliberately NOT set, so every
+           require_login()/require_can() in the app still treats this as a
+           guest until the code checks out. Enrolment runs on the same
+           half-session, so an account that must set up a factor cannot reach
+           any other page until it has. */
         session_regenerate_id(true);
         $_SESSION['mfa_pending'] = [
             'user_id' => $userId,
@@ -324,14 +406,20 @@ function attempt_login(string $identifier, string $password): array
 
         log_activity(
             'auth.mfa_challenge',
-            'Password accepted, awaiting authenticator code',
+            $needsEnrolment
+                ? 'Password accepted, awaiting two-factor enrolment'
+                : 'Password accepted, awaiting authenticator code',
             'user',
             $userId,
             $user,
             'Authentication'
         );
 
-        return ['status' => 'mfa_required', 'message' => '', 'user' => $user];
+        return [
+            'status' => $needsEnrolment ? 'mfa_enrol_required' : 'mfa_required',
+            'message' => '',
+            'user' => $user,
+        ];
     }
 
     establish_session($user);
