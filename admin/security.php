@@ -47,6 +47,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $expiry = max(0, min(365, (int)($_POST['password_expiry_days'] ?? 90)));
         $lockMins = max(0, min(1440, (int)($_POST['lockout_minutes'] ?? 15)));
 
+        /* The four character classes. An unticked box sends nothing, so
+           absence is what "off" looks like in a checkbox form - there is no
+           default to fall back on here, unlike the numbers above. */
+        $classes = ['upper', 'lower', 'digit', 'symbol'];
+        $wanted = [];
+        foreach ($classes as $class) {
+            $wanted[$class] = isset($_POST['password_require_' . $class]) ? '1' : '0';
+        }
+
         $before = [
             'max_login_attempts' => sec_max_attempts(),
             'session_timeout_secs' => sec_session_timeout(),
@@ -54,12 +63,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'password_expiry_days' => sec_password_expiry_days(),
             'lockout_minutes' => sec_lockout_minutes(),
         ];
+        foreach ($classes as $class) {
+            $before['password_require_' . $class] = sec_password_requires($class) ? '1' : '0';
+        }
 
         setting_put('max_login_attempts', (string)$attempts);
         setting_put('session_timeout_secs', (string)$timeout);
         setting_put('password_min_length', (string)$minLen);
         setting_put('password_expiry_days', (string)$expiry);
         setting_put('lockout_minutes', (string)$lockMins);
+        foreach ($classes as $class) {
+            setting_put('password_require_' . $class, $wanted[$class]);
+        }
 
         $after = [
             'max_login_attempts' => $attempts,
@@ -68,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'password_expiry_days' => $expiry,
             'lockout_minutes' => $lockMins,
         ];
+        foreach ($classes as $class) {
+            $after['password_require_' . $class] = $wanted[$class];
+        }
+
         $changed = [];
         foreach ($after as $key => $value) {
             if ($before[$key] !== $value) {
@@ -369,7 +388,50 @@ $pendingActivation = (int)db()->query(
                         <label class="form-label" for="secMinLen">Minimum password length</label>
                         <input type="number" id="secMinLen" name="password_min_length" class="form-control"
                                min="8" max="64" value="<?= sec_password_min() ?>" required>
-                        <p class="form-text">Required default: 12, plus upper, lower, number and symbol.</p>
+                        <p class="form-text">Required baseline: 12. Eight is the lowest this will go,
+                            whatever is saved here.</p>
+                    </div>
+
+                    <?php
+                    /* The complexity rules. Each ticked box becomes a rule in
+                       password_rules(), which is the single list the server
+                       enforces and the registration and change-password
+                       checklists are drawn from - so what someone is shown is
+                       literally what is applied. */
+                    $passwordClasses = [
+                        'upper' => ['An uppercase letter', 'A to Z'],
+                        'lower' => ['A lowercase letter', 'a to z'],
+                        'digit' => ['A number', '0 to 9'],
+                        'symbol' => ['A special character', 'anything that is not a letter or a number'],
+                    ];
+                    ?>
+                    <div class="field-group">
+                        <span class="form-label">Password must contain</span>
+                        <p class="form-text" style="margin-top:0">
+                            The required baseline is all four. Unticking one removes it from the
+                            policy everywhere at once &mdash; the checklist people see and the
+                            check the server runs are the same list.
+                        </p>
+                        <?php foreach ($passwordClasses as $class => [$label, $hint]): ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="1"
+                                       id="secReq<?= e(ucfirst($class)) ?>"
+                                       name="password_require_<?= e($class) ?>"
+                                       <?= sec_password_requires($class) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="secReq<?= e(ucfirst($class)) ?>">
+                                    <?= e($label) ?>
+                                    <span class="text-muted">&mdash; <?= e($hint) ?></span>
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="field-group">
+                        <span class="form-label">Current policy</span>
+                        <p class="form-text" style="margin-top:0">
+                            A password must have:
+                            <?= e(implode(', ', array_keys(password_rules()))) ?>.
+                        </p>
                     </div>
 
                     <div class="field-group">
