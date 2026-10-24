@@ -39,30 +39,66 @@ function sec_password_min(): int
 }
 
 /**
- * Which character classes a password must contain.
+ * How many characters of a given class a password must contain.
  *
- * Each is a setting rather than a constant so an administrator can shape the
- * policy from the Security screen. The defaults are the required baseline -
- * twelve characters with an upper, a lower, a digit and a symbol - so an
- * installation that never touches the screen already enforces it.
+ * A count rather than a yes/no, so a policy can ask for two digits or three
+ * symbols rather than only "at least one". Zero means the class is not
+ * required at all, which is what the old on/off setting expressed.
  *
- * Only the classes are optional. The length floor in sec_password_min() is
+ * Reads password_min_<class>, falling back to the earlier
+ * password_require_<class> flag so an installation that was configured before
+ * counts existed keeps the policy it already had.
+ *
+ * Only the classes are adjustable. The length floor in sec_password_min() is
  * not: eight characters is the lowest this will go whatever is saved.
  */
-function sec_password_requires(string $class): bool
+function sec_password_min_class(string $class): int
 {
-    $keys = [
-        'upper' => 'password_require_upper',
-        'lower' => 'password_require_lower',
-        'digit' => 'password_require_digit',
-        'symbol' => 'password_require_symbol',
-    ];
-
-    if (!isset($keys[$class])) {
-        return false;
+    if (!in_array($class, password_classes(), true)) {
+        return 0;
     }
 
-    return setting($keys[$class], '1') === '1';
+    /* '' is the "absent" marker: setting() wants a string default, and a key
+       that really holds '0' must not be mistaken for one that is unset. */
+    $stored = setting('password_min_' . $class, '');
+
+    if ($stored === '') {
+        // Pre-counts configuration: the flag meant "at least one".
+        return setting('password_require_' . $class, '1') === '1' ? 1 : 0;
+    }
+
+    return max(0, min(64, (int)$stored));
+}
+
+/** The character classes a policy can ask for, in the order they are shown. */
+function password_classes(): array
+{
+    return ['upper', 'lower', 'digit', 'symbol'];
+}
+
+/**
+ * The regex matching one character of a class, and how to name it.
+ *
+ * One definition so the rule, its label and the admin screen cannot describe
+ * different things.
+ */
+function password_class_spec(string $class): array
+{
+    return [
+        'upper' => ['pattern' => '/[A-Z]/', 'one' => 'An uppercase letter', 'many' => 'uppercase letters', 'hint' => 'A to Z'],
+        'lower' => ['pattern' => '/[a-z]/', 'one' => 'A lowercase letter', 'many' => 'lowercase letters', 'hint' => 'a to z'],
+        'digit' => ['pattern' => '/[0-9]/', 'one' => 'A number', 'many' => 'numbers', 'hint' => '0 to 9'],
+        'symbol' => ['pattern' => '/[^A-Za-z0-9]/', 'one' => 'A special character', 'many' => 'special characters',
+                     'hint' => 'anything that is not a letter or a number'],
+    ][$class] ?? ['pattern' => '/$^/', 'one' => '', 'many' => '', 'hint' => ''];
+}
+
+/** How a requirement of $count of $class should read. */
+function password_class_label(string $class, int $count): string
+{
+    $spec = password_class_spec($class);
+
+    return $count === 1 ? $spec['one'] : $count . ' ' . $spec['many'];
 }
 
 /** Days before a password must be changed. 0 disables expiry. */
@@ -110,27 +146,28 @@ function password_rules(): array
 {
     $min = sec_password_min();
 
-    /* Length is always a rule; the four character classes are there only when
-       the administrator has asked for them. A rule that is switched off is
-       absent from this list entirely, so it disappears from the checklist the
-       user sees and from the check the server runs at the same moment - the
-       two cannot disagree about what the policy is. */
+    /* Length is always a rule. Each character class is one too, but only when
+       the policy asks for at least one of it - a class set to zero is absent
+       from this list entirely, so it disappears from the checklist the user
+       sees and from the check the server runs at the same moment. The two
+       cannot disagree about what the policy is. */
     $rules = [
         $min . '+ characters' => static fn(string $p): bool => mb_strlen($p) >= $min,
     ];
 
-    if (sec_password_requires('upper')) {
-        $rules['An uppercase letter'] = static fn(string $p): bool => (bool)preg_match('/[A-Z]/', $p);
-    }
-    if (sec_password_requires('lower')) {
-        $rules['A lowercase letter'] = static fn(string $p): bool => (bool)preg_match('/[a-z]/', $p);
-    }
-    if (sec_password_requires('digit')) {
-        $rules['A number'] = static fn(string $p): bool => (bool)preg_match('/[0-9]/', $p);
-    }
-    if (sec_password_requires('symbol')) {
-        $rules['A special character'] = static fn(string $p): bool =>
-            (bool)preg_match('/[^A-Za-z0-9]/', $p);
+    foreach (password_classes() as $class) {
+        $need = sec_password_min_class($class);
+        if ($need < 1) {
+            continue;
+        }
+
+        $pattern = password_class_spec($class)['pattern'];
+
+        /* Counted, not merely detected: a policy asking for two digits has to
+           reject a password carrying one. preg_match_all returns how many
+           times the class appears. */
+        $rules[password_class_label($class, $need)] =
+            static fn(string $p): bool => preg_match_all($pattern, $p) >= $need;
     }
 
     return $rules;

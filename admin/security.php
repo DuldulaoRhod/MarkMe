@@ -47,13 +47,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $expiry = max(0, min(365, (int)($_POST['password_expiry_days'] ?? 90)));
         $lockMins = max(0, min(1440, (int)($_POST['lockout_minutes'] ?? 15)));
 
-        /* The four character classes. An unticked box sends nothing, so
-           absence is what "off" looks like in a checkbox form - there is no
-           default to fall back on here, unlike the numbers above. */
-        $classes = ['upper', 'lower', 'digit', 'symbol'];
+        /* How many of each character class the policy asks for. Zero means
+           the class is not required, which is what the old on/off setting
+           expressed. */
+        $classes = password_classes();
         $wanted = [];
         foreach ($classes as $class) {
-            $wanted[$class] = isset($_POST['password_require_' . $class]) ? '1' : '0';
+            $wanted[$class] = max(0, min(64, (int)($_POST['password_min_' . $class] ?? 0)));
+        }
+
+        /* A policy nobody can satisfy is worse than a weak one: it stops every
+           registration and every password change, including the administrator's
+           own. Asking for more class characters than the password may be long
+           is exactly that, so it is refused rather than saved. */
+        $demanded = array_sum($wanted);
+        if ($demanded > $minLen) {
+            flash_set('error', sprintf(
+                'That policy cannot be met: it asks for %d required characters but allows a minimum length of only %d. Raise the length or lower the counts.',
+                $demanded,
+                $minLen
+            ));
+            redirect('/admin/security.php');
         }
 
         $before = [
@@ -64,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'lockout_minutes' => sec_lockout_minutes(),
         ];
         foreach ($classes as $class) {
-            $before['password_require_' . $class] = sec_password_requires($class) ? '1' : '0';
+            $before['password_min_' . $class] = sec_password_min_class($class);
         }
 
         setting_put('max_login_attempts', (string)$attempts);
@@ -73,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setting_put('password_expiry_days', (string)$expiry);
         setting_put('lockout_minutes', (string)$lockMins);
         foreach ($classes as $class) {
-            setting_put('password_require_' . $class, $wanted[$class]);
+            setting_put('password_min_' . $class, (string)$wanted[$class]);
         }
 
         $after = [
@@ -84,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'lockout_minutes' => $lockMins,
         ];
         foreach ($classes as $class) {
-            $after['password_require_' . $class] = $wanted[$class];
+            $after['password_min_' . $class] = $wanted[$class];
         }
 
         $changed = [];
@@ -393,37 +407,39 @@ $pendingActivation = (int)db()->query(
                     </div>
 
                     <?php
-                    /* The complexity rules. Each ticked box becomes a rule in
-                       password_rules(), which is the single list the server
-                       enforces and the registration and change-password
+                    /* How many of each class the policy asks for. Each becomes a
+                       rule in password_rules(), which is the single list the
+                       server enforces and the registration and change-password
                        checklists are drawn from - so what someone is shown is
-                       literally what is applied. */
-                    $passwordClasses = [
-                        'upper' => ['An uppercase letter', 'A to Z'],
-                        'lower' => ['A lowercase letter', 'a to z'],
-                        'digit' => ['A number', '0 to 9'],
-                        'symbol' => ['A special character', 'anything that is not a letter or a number'],
-                    ];
+                       literally what is applied to them. */
                     ?>
                     <div class="field-group">
                         <span class="form-label">Password must contain</span>
                         <p class="form-text" style="margin-top:0">
-                            The required baseline is all four. Unticking one removes it from the
-                            policy everywhere at once &mdash; the checklist people see and the
-                            check the server runs are the same list.
+                            How many characters of each kind are required. Zero means that kind
+                            is not required at all. The baseline is one of each.
                         </p>
-                        <?php foreach ($passwordClasses as $class => [$label, $hint]): ?>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="1"
-                                       id="secReq<?= e(ucfirst($class)) ?>"
-                                       name="password_require_<?= e($class) ?>"
-                                       <?= sec_password_requires($class) ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="secReq<?= e(ucfirst($class)) ?>">
-                                    <?= e($label) ?>
-                                    <span class="text-muted">&mdash; <?= e($hint) ?></span>
-                                </label>
-                            </div>
-                        <?php endforeach; ?>
+                        <div class="pw-class-grid">
+                            <?php foreach (password_classes() as $class): ?>
+                                <?php $spec = password_class_spec($class); ?>
+                                <div class="pw-class-row">
+                                    <label class="form-label" for="secMin<?= e(ucfirst($class)) ?>">
+                                        <?= e($spec['many']) ?>
+                                        <span class="text-muted">&mdash; <?= e($spec['hint']) ?></span>
+                                    </label>
+                                    <input type="number" class="form-control"
+                                           id="secMin<?= e(ucfirst($class)) ?>"
+                                           name="password_min_<?= e($class) ?>"
+                                           min="0" max="64"
+                                           value="<?= sec_password_min_class($class) ?>" required>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="form-text">
+                            The counts together cannot exceed the minimum length &mdash; a policy
+                            asking for more required characters than the password may be long is
+                            one nobody could ever satisfy, so it is refused rather than saved.
+                        </p>
                     </div>
 
                     <div class="field-group">

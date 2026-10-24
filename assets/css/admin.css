@@ -1205,3 +1205,25 @@
   color: var(--ink);
   word-break: break-all;
 }
+
+/* Password policy: one row per character class, label beside a small count. */
+.pw-class-grid {
+  display: grid;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.pw-class-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  align-items: center;
+  gap: var(--s-4);
+}
+.pw-class-row .form-label {
+  margin: 0;
+}
+@media (max-width: 575.98px) {
+  .pw-class-row {
+    grid-template-columns: minmax(0, 1fr) 5rem;
+    gap: var(--s-3);
+  }
+}
