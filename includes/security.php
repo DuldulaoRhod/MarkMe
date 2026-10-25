@@ -759,8 +759,20 @@ function mail_configured(): bool
 /**
  * @return array{sent: bool, reason: string, outbox: ?string}
  */
-function mail_send(string $to, string $subject, string $bodyText): array
-{
+
+/**
+ * Send an email, optionally with an HTML alternative.
+ *
+ * The outbox continues to store the plain-text version.
+ *
+ * @return array{sent: bool, reason: string, outbox: ?string}
+ */
+function mail_send(
+    string $to,
+    string $subject,
+    string $bodyText,
+    ?string $bodyHtml = null
+): array {
     $outbox = mail_write_outbox($to, $subject, $bodyText);
 
     if (!mail_configured()) {
@@ -771,10 +783,15 @@ function mail_send(string $to, string $subject, string $bodyText): array
         ];
     }
 
-    $result = smtp_deliver($to, $subject, $bodyText);
+    $result = smtp_deliver($to, $subject, $bodyText, $bodyHtml);
 
-    return ['sent' => $result['ok'], 'reason' => $result['reason'], 'outbox' => $outbox];
+    return [
+        'sent' => $result['ok'],
+        'reason' => $result['reason'],
+        'outbox' => $outbox,
+    ];
 }
+
 
 /** Every outgoing message is written here, sent or not, for verification. */
 function mail_write_outbox(string $to, string $subject, string $body): ?string
@@ -794,39 +811,69 @@ function mail_write_outbox(string $to, string $subject, string $body): ?string
  * Minimal SMTP client. No Composer dependency, and no pretending: every
  * failure path returns the server's own response text.
  */
-function smtp_deliver(string $to, string $subject, string $body): array
-{
+
+function smtp_deliver(
+    string $to,
+    string $subject,
+    string $body,
+    ?string $html = null
+): array {
     $host = SMTP_HOST;
     $port = defined('SMTP_PORT') ? (int)SMTP_PORT : 587;
     $secure = defined('SMTP_SECURE') ? strtolower((string)SMTP_SECURE) : 'tls';
     $from = defined('SMTP_FROM') && SMTP_FROM !== '' ? SMTP_FROM : SMTP_USER;
 
+    // Prevent SMTP command/header injection.
+    foreach ([$to, $from] as $address) {
+        if (!filter_var($address, FILTER_VALIDATE_EMAIL)
+            || preg_match('/[\r\n]/', $address)) {
+            return ['ok' => false, 'reason' => 'Invalid email address.'];
+        }
+    }
+
+    if (preg_match('/[\r\n]/', $subject)) {
+        return ['ok' => false, 'reason' => 'Invalid email subject.'];
+    }
+
     $target = ($secure === 'ssl' ? 'ssl://' : '') . $host . ':' . $port;
     $socket = @stream_socket_client($target, $errNo, $errStr, 10);
+
     if (!$socket) {
-        return ['ok' => false, 'reason' => "Could not connect to $host:$port - $errStr"];
+        return [
+            'ok' => false,
+            'reason' => "Could not connect to $host:$port - $errStr",
+        ];
     }
+
+    stream_set_timeout($socket, 15);
 
     $read = static function ($socket): string {
         $data = '';
+
         while (($line = fgets($socket, 515)) !== false) {
             $data .= $line;
+
             if (strlen($line) < 4 || $line[3] === ' ') {
                 break;
             }
         }
+
         return $data;
     };
+
     $say = static function ($socket, string $cmd) use ($read): string {
         fwrite($socket, $cmd . "\r\n");
         return $read($socket);
     };
-    $ok = static fn(string $r, string $code): bool => str_starts_with(trim($r), $code);
+
+    $ok = static fn(string $response, string $code): bool =>
+        str_starts_with(trim($response), $code);
 
     $greeting = $read($socket);
+
     if (!$ok($greeting, '220')) {
         fclose($socket);
-        return ['ok' => false, 'reason' => 'Unexpected SMTP greeting: ' . trim($greeting)];
+        return ['ok' => false, 'reason' => 'Unexpected SMTP greeting.'];
     }
 
     $helo = $say($socket, 'EHLO markme.local');
@@ -836,49 +883,97 @@ function smtp_deliver(string $to, string $subject, string $body): array
             fclose($socket);
             return ['ok' => false, 'reason' => 'Server refused STARTTLS.'];
         }
-        if (!@stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+
+        if (!@stream_socket_enable_crypto(
+            $socket,
+            true,
+            STREAM_CRYPTO_METHOD_TLS_CLIENT
+        )) {
             fclose($socket);
             return ['ok' => false, 'reason' => 'TLS negotiation failed.'];
         }
+
         $helo = $say($socket, 'EHLO markme.local');
     }
 
     if (!$ok($helo, '250')) {
         fclose($socket);
-        return ['ok' => false, 'reason' => 'EHLO rejected: ' . trim($helo)];
+        return ['ok' => false, 'reason' => 'EHLO rejected.'];
     }
 
-    $say($socket, 'AUTH LOGIN');
-    $say($socket, base64_encode(SMTP_USER));
+    if (!$ok($say($socket, 'AUTH LOGIN'), '334')) {
+        fclose($socket);
+        return ['ok' => false, 'reason' => 'SMTP AUTH LOGIN was rejected.'];
+    }
+
+    if (!$ok($say($socket, base64_encode(SMTP_USER)), '334')) {
+        fclose($socket);
+        return ['ok' => false, 'reason' => 'SMTP username was rejected.'];
+    }
+
     $auth = $say($socket, base64_encode(SMTP_PASS));
+
     if (!$ok($auth, '235')) {
         fclose($socket);
-        // The server's text, not the credentials.
-        return ['ok' => false, 'reason' => 'SMTP authentication failed: ' . trim($auth)];
+        return ['ok' => false, 'reason' => 'SMTP authentication failed.'];
     }
 
     if (!$ok($say($socket, 'MAIL FROM:<' . $from . '>'), '250')) {
         fclose($socket);
         return ['ok' => false, 'reason' => 'Sender rejected.'];
     }
-    if (!$ok($say($socket, 'RCPT TO:<' . $to . '>'), '250')) {
+
+    $recipient = $say($socket, 'RCPT TO:<' . $to . '>');
+
+    if (!in_array(substr(trim($recipient), 0, 3), ['250', '251'], true)) {
         fclose($socket);
         return ['ok' => false, 'reason' => 'Recipient rejected.'];
     }
+
     if (!$ok($say($socket, 'DATA'), '354')) {
         fclose($socket);
         return ['ok' => false, 'reason' => 'Server refused DATA.'];
     }
 
+    $subjectHeader = function_exists('mb_encode_mimeheader')
+        ? mb_encode_mimeheader($subject, 'UTF-8', 'B', "\r\n")
+        : '=?UTF-8?B?' . base64_encode($subject) . '?=';
+
     $headers = 'From: MarkMe <' . $from . ">\r\n"
         . 'To: <' . $to . ">\r\n"
-        . 'Subject: ' . $subject . "\r\n"
-        . "MIME-Version: 1.0\r\n"
-        . "Content-Type: text/plain; charset=UTF-8\r\n\r\n";
+        . 'Subject: ' . $subjectHeader . "\r\n"
+        . "MIME-Version: 1.0\r\n";
 
-    // Dot-stuffing, so a line that is just "." cannot end the message early.
-    $safeBody = preg_replace('/^\./m', '..', str_replace("\n", "\r\n", $body));
-    $sent = $say($socket, $headers . $safeBody . "\r\n.");
+    if ($html !== null && $html !== '') {
+        $boundary = 'markme_' . bin2hex(random_bytes(16));
+
+        $headers .= 'Content-Type: multipart/alternative; boundary="'
+            . $boundary . "\"\r\n\r\n";
+
+        $message = '--' . $boundary . "\r\n"
+            . "Content-Type: text/plain; charset=UTF-8\r\n"
+            . "Content-Transfer-Encoding: base64\r\n\r\n"
+            . chunk_split(base64_encode($body), 76, "\r\n")
+            . '--' . $boundary . "\r\n"
+            . "Content-Type: text/html; charset=UTF-8\r\n"
+            . "Content-Transfer-Encoding: base64\r\n\r\n"
+            . chunk_split(base64_encode($html), 76, "\r\n")
+            . '--' . $boundary . "--\r\n";
+    } else {
+        $headers .= "Content-Type: text/plain; charset=UTF-8\r\n"
+            . "Content-Transfer-Encoding: base64\r\n\r\n";
+
+        $message = chunk_split(base64_encode($body), 76, "\r\n");
+    }
+
+    // SMTP requires CRLF line endings and dot-stuffing.
+    $message = str_replace(["\r\n", "\r", "\n"], "\n", $message);
+    $message = str_replace("\n", "\r\n", $message);
+    $message = preg_replace('/^\./m', '..', $message) ?? $message;
+
+    fwrite($socket, $headers . $message . "\r\n.\r\n");
+    $sent = $read($socket);
+
     $say($socket, 'QUIT');
     fclose($socket);
 
@@ -886,6 +981,7 @@ function smtp_deliver(string $to, string $subject, string $body): array
         ? ['ok' => true, 'reason' => '']
         : ['ok' => false, 'reason' => 'Message rejected: ' . trim($sent)];
 }
+
 
 /* ===================================================================
    Request context, for the audit trail
