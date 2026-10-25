@@ -115,10 +115,9 @@ $mail = mail_send(
     . "If you did not create this account you can ignore this message.\n"
 );
 
-// No session exists yet, so the new account is named as its own actor.
 log_activity(
     'account.registered',
-    'Created a customer account (awaiting email activation)',
+    'Created a customer account (awaiting email activation)' . ($mail['sent'] ? '' : ' - email failed'),
     'user',
     $userId,
     ['user_id' => $userId, 'role' => 'customer', 'username' => $old['username']],
@@ -127,18 +126,18 @@ log_activity(
 
 if ($mail['sent']) {
     flash_set('login_success',
-        'Account created. Check ' . $old['email'] . ' for the activation link, then log in.');
+        'Account created. We sent an activation link to ' . $old['email']
+        . '. Click it, then log in. Check your spam folder if you do not see it.');
 } else {
-    // SMTP is not configured in this environment, so say so plainly rather
-    // than claiming an email went out. The token is real either way; this
-    // just hands over the link that would have been emailed.
-    flash_set('activation_link', $activationLink);
-    flash_set('login_success',
-        'Account created, but email is not configured on this server, so no message was sent. '
-        . 'Use the activation link shown below.');
+    // Never reveal the link. The account stays inactive until the owner of the
+    // address proves they can read mail sent to it.
+    error_log('register: activation email failed for user ' . $userId . ' - ' . $mail['reason']);
+    flash_set('login_error',
+        'Your account was created, but we could not send the activation email. '
+        . 'Use "Send me a new activation link" below to try again.');
 }
 
 flash_set('login_old_identifier', $old['username']);
 flash_set('reopen_modal', 'login');
 flash_set('login_return_to', $returnTo);
-redirect($returnTo);
+redirect($returnTo); 
