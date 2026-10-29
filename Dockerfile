@@ -1,3 +1,4 @@
+
 FROM php:8.2-apache
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -18,10 +19,12 @@ RUN sed -ri 's/Listen 80/Listen 10000/' \
     && sed -ri 's/<VirtualHost \*:80>/<VirtualHost *:10000>/' \
     /etc/apache2/sites-available/000-default.conf
 
-RUN cp /var/www/html/config/config.example.php /var/www/html/config/config.php
-
 WORKDIR /var/www/html
 
 COPY . /var/www/html
 
+RUN cp /var/www/html/config/config.example.php /var/www/html/config/config.php
+
 EXPOSE 10000
+
+CMD ["apache2-foreground"]
