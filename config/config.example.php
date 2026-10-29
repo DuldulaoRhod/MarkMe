@@ -124,6 +124,13 @@ define('SMTP_USER', '');
 define('SMTP_PASS', '');
 define('SMTP_FROM', '');        // defaults to SMTP_USER when blank
 
+
+// Mailjet settings
+define('MAILJET_API_KEY', getenv('MAILJET_API_KEY') ?: '');
+define('MAILJET_SECRET_KEY', getenv('MAILJET_SECRET_KEY') ?: '');
+define('MAILJET_FROM_EMAIL', getenv('MAILJET_FROM_EMAIL') ?: '');
+
+
 // Set to true once the site is served over HTTPS. It turns on the Secure
 // flag for the session cookie; leaving it true on plain HTTP would stop
 // the cookie being sent at all, which is why it is not simply hard-coded.
