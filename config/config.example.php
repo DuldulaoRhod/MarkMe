@@ -127,7 +127,6 @@ define('SMTP_FROM', '');        // defaults to SMTP_USER when blank
 // Set to true once the site is served over HTTPS. It turns on the Secure
 // flag for the session cookie; leaving it true on plain HTTP would stop
 // the cookie being sent at all, which is why it is not simply hard-coded.
-define('FORCE_HTTPS', false);
 
 // ---------------------------------------------------------------------
 // Application timezone
