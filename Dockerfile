@@ -25,6 +25,15 @@ COPY . /var/www/html
 
 RUN cp /var/www/html/config/config.example.php /var/www/html/config/config.php
 
+RUN mkdir -p /var/www/html/uploads/designs \
+    /var/www/html/storage/outbox \
+    && chown -R www-data:www-data \
+       /var/www/html/uploads \
+       /var/www/html/storage \
+    && chmod -R 775 \
+       /var/www/html/uploads \
+       /var/www/html/storage
+       
 EXPOSE 10000
 
 CMD ["apache2-foreground"]
