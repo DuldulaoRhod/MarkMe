@@ -18,6 +18,8 @@ RUN sed -ri 's/Listen 80/Listen 10000/' \
     && sed -ri 's/<VirtualHost \*:80>/<VirtualHost *:10000>/' \
     /etc/apache2/sites-available/000-default.conf
 
+RUN cp /var/www/html/config/config.example.php /var/www/html/config/config.php
+
 WORKDIR /var/www/html
 
 COPY . /var/www/html
