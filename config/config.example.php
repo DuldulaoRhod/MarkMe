@@ -2,14 +2,23 @@
 // Copy this file to config.php and fill in real values for your environment.
 // config.php is gitignored so real credentials never get committed.
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'markme_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'markme_db');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
+
 // Base URL of the app as served by XAMPP, no trailing slash.
-define('BASE_URL', 'http://localhost/markme');
+
+define(
+    'BASE_URL',
+    rtrim(
+        getenv('BASE_URL') ?: 'http://localhost/markme',
+        '/'
+    )
+);
+
 
 // Upload constraints
 define('MAX_UPLOAD_BYTES', 2 * 1024 * 1024); // 2MB
@@ -86,8 +95,25 @@ define('CUSTOM_TEXT_MAX', 20);
 
 // Google reCAPTCHA v2 ("I'm not a robot"). Get keys at
 // https://www.google.com/recaptcha/admin  -> register localhost.
-define('RECAPTCHA_SITE_KEY', '');
-define('RECAPTCHA_SECRET_KEY', '');
+
+define(
+    'RECAPTCHA_SITE_KEY',
+    getenv('RECAPTCHA_SITE_KEY') ?: ''
+);
+
+define(
+    'RECAPTCHA_SECRET_KEY',
+    getenv('RECAPTCHA_SECRET_KEY') ?: ''
+);
+
+define(
+    'FORCE_HTTPS',
+    filter_var(
+        getenv('FORCE_HTTPS') ?: 'false',
+        FILTER_VALIDATE_BOOLEAN
+    )
+);
+
 
 // SMTP, for account-activation email. For Gmail use an App Password, not
 // the account password: host smtp.gmail.com, port 587, secure 'tls'.
