@@ -38,9 +38,7 @@ define('ALLOWED_IMAGE_MIME', ['image/jpeg', 'image/png', 'image/webp']);
 // AV_REQUIRED decides what happens when no scanner is configured:
 //   true  - refuse every upload (fail closed; correct for a public server)
 //   false - accept the upload and record that it was not scanned
-define('AV_SCANNER', '');
-define('AV_REQUIRED', false);
-define('AV_TIMEOUT_SECONDS', 20);
+define('AV_REQUIRED', true);
 
 // ---------------------------------------------------------------------
 // PayMongo (https://docs.paymongo.com)
@@ -148,7 +146,3 @@ define('MAILJET_FROM_EMAIL', getenv('MAILJET_FROM_EMAIL') ?: '');
 // ---------------------------------------------------------------------
 define('APP_TIMEZONE', 'Asia/Manila');
 
-
-define('AV_SCANNER', '/usr/bin/clamscan');
-define('AV_TIMEOUT_SECONDS', 60);
-define('AV_REQUIRED', true);
