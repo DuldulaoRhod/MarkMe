@@ -147,3 +147,8 @@ define('MAILJET_FROM_EMAIL', getenv('MAILJET_FROM_EMAIL') ?: '');
 // Set this to the timezone the database server runs in.
 // ---------------------------------------------------------------------
 define('APP_TIMEZONE', 'Asia/Manila');
+
+
+define('AV_SCANNER', '/usr/bin/clamscan');
+define('AV_TIMEOUT_SECONDS', 60);
+define('AV_REQUIRED', true);
